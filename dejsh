@@ -657,7 +657,7 @@ comp_zsh() {
     case $c in hook|completion) spec="$spec '1:shell:(zsh bash fish)'";; compare) spec="$spec '1:profile file:_files'";; esac
     [ -n "$spec" ] && printf '        %s) _arguments%s ;;\n' "$c" "$spec"
   done
-  printf '      esac ;;\n  esac\n}\ncompdef _dejsh dejsh\n'
+  printf '      esac ;;\n  esac\n}\nif [ "$funcstack[1]" = "_dejsh" ]; then\n  _dejsh "$@"\nelse\n  compdef _dejsh dejsh\nfi\n'
 }
 
 comp_bash() {

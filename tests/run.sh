@@ -255,6 +255,11 @@ done
 if command -v zsh >/dev/null 2>&1; then
   printf 'autoload -Uz compinit\ncompinit -u -d "%s/zcd" 2>/dev/null\neval "$("%s" completion zsh)"\nprint -r -- "${_comps[dejsh]}"\n' "$W" "$D" > "$W/zt.zsh"
   t "zsh completion registers with compinit" test "$(zsh -f "$W/zt.zsh" 2>/dev/null | tail -1)" = "_dejsh"
+  # the way Homebrew installs it: a file named _dejsh on fpath, autoloaded by compinit
+  ZF=$(mktemp -d); "$D" completion zsh > "$ZF/_dejsh"
+  printf 'fpath=("%s" $fpath)\nautoload -Uz compinit\ncompinit -u -d "%s/zcd2" 2>/dev/null\nprint -r -- "${_comps[dejsh]}"\n' "$ZF" "$W" > "$W/zt2.zsh"
+  t "zsh completion registers via fpath (Homebrew style)" test "$(zsh -f "$W/zt2.zsh" 2>/dev/null | tail -1)" = "_dejsh"
+  t "zsh file calls itself when autoloaded" has "$(cat "$ZF/_dejsh")" '_dejsh "$@"'
 fi
 if command -v fish >/dev/null 2>&1; then
   printf '%s\n' "$("$D" completion fish)" > "$W/c.fish"

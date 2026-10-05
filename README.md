@@ -304,7 +304,7 @@ It learns from failures you've already had since installing the recorder. It nee
 No. It is pattern-based and misses secrets with no recognisable shape. Treat it as a smoke detector, not an audit.
 
 **Does it work with fish?**
-Yes. dejsh reads `~/.local/share/fish/fish_history`, and `dejsh hook fish --install` adds the recorder to `~/.config/fish/config.fish`. The fish recorder is newer than the zsh and bash ones, so please open an issue if it misbehaves.
+Yes. dejsh reads `~/.local/share/fish/fish_history`, and `dejsh hook fish --install` adds the recorder to `~/.config/fish/config.fish`. The fish recorder and fish completions are tested in real fish shells on Linux and macOS in CI, the same as zsh and bash.
 
 **Is it safe to run `dejsh alias --raw >> ~/.zshrc`?**
 It skips names that already exist as commands or aliases and never emits commands that look like they contain secrets. Skim the output first if you like. It's plain alias lines.

@@ -5,7 +5,8 @@ All notable changes. Format based on [Keep a Changelog](https://keepachangelog.c
 ## [0.8.0]
 - Tab completion for zsh, bash and fish: `dejsh completion <shell> [--install]`. Completes commands, flags, and arguments (shells, time windows, files).
 - Homebrew installs the completions automatically.
-- CI now installs fish, so fish completion and the fish recorder are tested for real.
+- CI now installs fish and drives each shell through a real pseudo-terminal, so the zsh, bash and fish recorders and the fish completions are all tested for real (114 checks).
+- The zsh completion file works both when `eval`'d and when autoloaded from `fpath` (how Homebrew installs it).
 
 ## [0.7.1]
 - `fix` / `fixes` now measure the fix from the *last* failure before success, so noisy retries and abandoned attempts no longer pollute the remembered fix.
