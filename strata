@@ -1,21 +1,120 @@
 #!/usr/bin/env bash
-# strata — excavate your shell history as geological layers.
-# usage: strata [-l layers] [-w width] [histfile]
-LAYERS=8; WIDTH=64
-while getopts "l:w:h" o; do case $o in l) LAYERS=$OPTARG;; w) WIDTH=$OPTARG;; *) echo "usage: strata [-l layers] [-w width] [histfile]"; exit 1;; esac; done
-shift $((OPTIND-1))
-H=${1:-${HISTFILE:-}}
-for f in "$H" "$HOME/.zsh_history" "$HOME/.bash_history"; do [ -n "$f" ] && [ -r "$f" ] && { H=$f; break; }; done
-[ -r "$H" ] || { echo "no history file found"; exit 1; }
+# strata — your shell history, audited: aliases, typos, leaked secrets, repeated workflows, recall.
+VERSION=0.2.0
+LAYERS=8; WIDTH=64; TOPN=10; RAW=0; SCRUB=0; HFILE=${STRATA_HIST:-}
+B=$'\033[1m'; D=$'\033[2m'; R=$'\033[0m'; GRN=$'\033[32m'; YEL=$'\033[33m'; RED=$'\033[31m'; CYN=$'\033[36m'
 
-# Stage 1+2: normalise history -> per-layer statistics (awk does the digging)
-DIG=$(LC_ALL=C awk -v N="$LAYERS" '
-function norm(s,  a,k,w){ k=split(s,a,/[ \t]+/)
+usage() { cat <<U
+${B}strata${R} $VERSION — find what's fixable in your shell history
+
+  strata                   checkup: what strata found on your machine
+  strata alias             commands you retype a lot -> ready-to-paste aliases
+  strata typos             recurring typos (gti, dokcer...) -> fix-aliases
+  strata leaks [--scrub]   passwords/API keys sitting in plaintext in history
+  strata flows             command sequences you repeat -> one-command macros
+  strata find <words...>   "what was that command?" — search by keywords
+  strata dig               your history as geological layers (-l layers, -w width)
+
+options: -f FILE (history file)  -n N (rows, default 10)  --raw (machine output, for >> ~/.zshrc)
+U
+}
+
+CMD=${1:-}
+case $CMD in dig|alias|typos|flows|leaks|find|doctor) shift;; help|-h|--help) usage; exit 0;; --version) echo "strata $VERSION"; exit 0;; *) CMD=doctor;; esac
+WORDS=()
+while [ $# -gt 0 ]; do case $1 in
+  -l) LAYERS=$2; shift 2;; -w) WIDTH=$2; shift 2;; -f) HFILE=$2; shift 2;; -n) TOPN=$2; shift 2;;
+  --raw) RAW=1; shift;; --scrub) SCRUB=1; shift;; -h|--help) usage; exit 0;; *) WORDS+=("$1"); shift;; esac; done
+[ "$CMD" != find ] && [ -n "${WORDS[0]:-}" ] && [ -r "${WORDS[0]}" ] && HFILE=${WORDS[0]}
+H=
+for f in "$HFILE" "${HISTFILE:-}" "$HOME/.zsh_history" "$HOME/.bash_history"; do [ -n "$f" ] && [ -r "$f" ] && { H=$f; break; }; done
+[ -n "$H" ] || { echo "strata: no history file found (try -f FILE)"; exit 1; }
+
+# ts<TAB>full command. Understands zsh EXTENDED_HISTORY and bash HISTTIMEFORMAT; skips strata's own invocations.
+load_full() { LC_ALL=C awk '
+  /^#[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]+$/ { bt=substr($0,2); next }
+  { t=0; line=$0
+    if (line ~ /^: [0-9]+:[0-9]+;/) { t=substr(line,3); sub(/:.*/,"",t); sub(/^: [0-9]+:[0-9]+;/,"",line) }
+    else if (bt!="") { t=bt; bt="" }
+    gsub(/^[ \t]+|[ \t]+$/,"",line); if (line=="" || line ~ /^strata( |$)/) next
+    print t "\t" line }' "$H"; }
+
+q="'"
+esc() { printf %s "${1//$q/$q\\$q$q}"; }
+sdate() { [ "${1:-0}" -gt 0 ] 2>/dev/null && { date -r "$1" "+%b %d" 2>/dev/null || date -d "@$1" "+%b %d" 2>/dev/null; } || printf '      '; }
+cnt() { wc -l | tr -d ' '; }
+
+# ---------- data stages (machine rows) ----------
+_alias_data() { load_full | LC_ALL=C awk -F'\t' '
+  function mk(l,  a,k,i,s,t){ k=split(l,a,/[ \t]+/)
+    if(a[1]=="cd"&&k>=2){ t=a[k]; sub(/\/+$/,"",t); sub(/.*\//,"",t); t=tolower(t); gsub(/[^a-z0-9]/,"",t); return "cd" substr(t,1,6) }
+    for(i=1;i<=k;i++){ t=a[i]; sub(/^[^A-Za-z0-9]+/,"",t); if(t!="") s=s tolower(substr(t,1,1)) }
+    if(length(s)<2) s=s substr(tolower(a[1]),2,1); if(s !~ /^[a-z]/) s="x" s; return s }
+  { l=$0; sub(/^[^\t]*\t/,"",l); lo=tolower(l)
+    if(length(l)<10||length(l)>300||l ~ /^(alias|export|source|\.) /) next
+    if(lo ~ /(token|secret|passw|api_?key|bearer|akia|sk-|private key)/) next
+    c[l]++ }
+  END{ for(l in c) if(c[l]>=3){ n=mk(l); s=c[l]*(length(l)-length(n)); if(s>=40) printf "%d\t%d\t%s\t%s\n", s, c[l], l, n } }' | sort -t"$(printf '\t')" -k1,1 -rn; }
+
+_typos_data() { load_full | LC_ALL=C awk -F'\t' '
+  function osa(a,b,  la,lb,i,j,c,d){ la=length(a); lb=length(b)
+    for(i=0;i<=la;i++)d[i,0]=i; for(j=0;j<=lb;j++)d[0,j]=j
+    for(i=1;i<=la;i++)for(j=1;j<=lb;j++){ c=(substr(a,i,1)==substr(b,j,1))?0:1
+      d[i,j]=d[i-1,j]+1; if(d[i,j-1]+1<d[i,j])d[i,j]=d[i,j-1]+1; if(d[i-1,j-1]+c<d[i,j])d[i,j]=d[i-1,j-1]+c
+      if(i>1&&j>1&&substr(a,i,1)==substr(b,j-1,1)&&substr(a,i-1,1)==substr(b,j,1)&&d[i-2,j-2]+1<d[i,j])d[i,j]=d[i-2,j-2]+1 }
+    return d[la,lb] }
+  { l=$0; sub(/^[^\t]*\t/,"",l); k=split(l,a,/[ \t]+/); w=""
+    for(i=1;i<=k;i++){ if(a[i] ~ /^[A-Za-z_][A-Za-z0-9_]*=/||a[i]=="sudo"||a[i]=="time"||a[i]=="command")continue; w=a[i]; break }
+    if(w==""||w ~ /[\/~.$(){}<>|&;"\x27=]/ ) next; n[w]++ }
+  END{ for(x in n) if(n[x]<=20&&length(x)>=3){ best=""; bn=0
+      for(y in n) if(n[y]>=10&&n[y]>=4*n[x]&&y!=x&&(length(x)-length(y))^2<=1&&n[y]>bn&&osa(x,y)==1){best=y;bn=n[y]}
+      if(best!="") printf "%d\t%s\t%s\t%d\n", n[x], x, best, bn } }' | sort -t"$(printf '\t')" -k1,1 -rn; }
+
+_flows_data() { load_full | LC_ALL=C awk -F'\t' '
+  BEGIN{ split("ls cd pwd clear cat echo open exit history man which less ll la",tr," "); for(i in tr)triv[tr[i]]=1
+         split("git docker npm yarn pnpm cargo kubectl brew make go pip pip3 gh terraform systemctl composer bundle rails",sb," "); for(i in sb)sub_[sb[i]]=1 }
+  { t=$1+0; l=$0; sub(/^[^\t]*\t/,"",l); k=split(l,a,/[ \t]+/); w=""; wi=0
+    for(i=1;i<=k;i++){ if(a[i] ~ /^[A-Za-z_][A-Za-z0-9_]*=/||a[i]=="sudo"||a[i]=="time"||a[i]=="command")continue; w=a[i]; wi=i; break }
+    sub(/.*\//,"",w); if(w==""||(w in triv)||w ~ /^[^A-Za-z0-9]/) next
+    key=w; if((w in sub_)&&wi<k&&a[wi+1] ~ /^[a-z][a-z0-9:_-]*$/&&length(a[wi+1])<=14) key=w " " a[wi+1]
+    m++; K[m]=key; Tm[m]=t; fc[key SUBSEP l]++ }
+  END{ for(x in fc){ split(x,p,SUBSEP); if(fc[x]>best[p[1]]){best[p[1]]=fc[x]; rep[p[1]]=p[2]} }
+    for(x in best) if(best[x]<2) rep[x]=x
+    for(n=3;n>=2;n--){ delete cn; delete cs
+      for(i=1;i+n-1<=m;i++){ if(Tm[i]>0&&Tm[i+n-1]>0&&Tm[i+n-1]-Tm[i]>900) continue
+        same=1; seq=K[i]; cmds=rep[K[i]]
+        for(j=1;j<n;j++){ if(K[i+j]!=K[i])same=0; seq=seq " -> " K[i+j]; cmds=cmds " && " rep[K[i+j]] }
+        if(same)continue; cn[seq]++; cs[seq]=cmds }
+      while(1){ bs=""; bc=2
+        for(s in cn) if(cn[s]>bc){ dup=0; for(u in done) if(index(u " -> " u,s)>0)dup=1; if(!dup){bs=s;bc=cn[s]} }
+        if(bs=="")break; done[bs]=1; printf "%d\t%d\t%s\t%s\n", cn[bs]*n, cn[bs], bs, cs[bs]; delete cn[bs] } } }' | sort -t"$(printf '\t')" -k1,1 -rn; }
+
+_leaks_data() { LC_ALL=C awk -v Q="'" '
+  function rd(kind,v,  p,shown){ if(v==""||length(v)<4) return 0; p=index(line,v); if(!p) return 0
+    shown=substr(line,1,p-1) "<" substr(v,1,3) "..." length(v) ">" substr(line,p+length(v)); if(length(shown)>100) shown=substr(shown,1,97) "..."
+    print NR "\t" kind "\t" shown; return 1 }
+  { line=$0; sub(/^: [0-9]+:[0-9]+;/,"",line); if(line ~ /^strata( |$)/) next; lo=tolower(line)
+    if(match(line,/AKIA[0-9A-Z]+/)&&RLENGTH==20&&rd("AWS access key",substr(line,RSTART,RLENGTH))) next
+    if(match(line,/gh[pousr]_[A-Za-z0-9]+/)&&RLENGTH>=30&&rd("GitHub token",substr(line,RSTART,RLENGTH))) next
+    if(match(line,/github_pat_[A-Za-z0-9_]+/)&&rd("GitHub token",substr(line,RSTART,RLENGTH))) next
+    if(match(line,/sk-[A-Za-z0-9_-]+/)&&RLENGTH>=24&&rd("API key (sk-...)",substr(line,RSTART,RLENGTH))) next
+    if(match(line,/xox[baprs]-[A-Za-z0-9-]+/)&&RLENGTH>=20&&rd("Slack token",substr(line,RSTART,RLENGTH))) next
+    if(match(line,/[Bb]earer [A-Za-z0-9._~+\/=-]+/)){ v=substr(line,RSTART+7,RLENGTH-7); if(length(v)>=20&&rd("Bearer token",v)) next }
+    if(line ~ /-----BEGIN [A-Z ]*PRIVATE KEY/){ print NR "\tPrivate key\t(private key pasted in a command)"; next }
+    if(match(line,/:\/\/[^\/ :@]+:[^\/ @]+@/)){ s=substr(line,RSTART,RLENGTH); sub(/^:\/\/[^:]+:/,"",s); sub(/@$/,"",s); if(rd("Password in URL",s)) next }
+    if(match(lo,/--(password|passwd|token|api-key|secret)[= ]+[^ ]+/)){ s=substr(line,RSTART,RLENGTH); sub(/^--[A-Za-z-]+[= ]+/,"",s); gsub("^"Q"|"Q"$|^\"|\"$","",s); if(rd("Secret in flag",s)) next }
+    if(lo ~ /(mysql|psql|mongo)/&&match(line,/ -p[^ ]+/)){ if(rd("Database password",substr(line,RSTART+3,RLENGTH-3))) next }
+    if(lo ~ /curl/&&match(line,/ -u [^ :]+:[^ ]+/)){ s=substr(line,RSTART+4,RLENGTH-4); sub(/^[^:]+:/,"",s); if(rd("curl credentials",s)) next }
+    if(match(lo,/[a-z0-9_]*(key|token|secret|passw(or)?d)[a-z0-9_]*=[^ ]+/)){ s=substr(line,RSTART,RLENGTH); e=index(s,"="); v=substr(s,e+1); gsub("^"Q"|"Q"$|^\"|\"$","",v)
+      if(length(v)>=8&&v !~ /^[$(~\/.]/&&v !~ /^[A-Za-z_-]+$/&&rd("Secret assignment",v)) next } }' "$H"; }
+
+cmd_dig() {
+DIG=$(load_full | LC_ALL=C awk -F'\t' -v N="$LAYERS" '
+function norm(s,  a,k,w,i){ k=split(s,a,/[ \t]+/)
   for(i=1;i<=k;i++){ w=a[i]; if(w=="")continue
     if(w ~ /^[A-Za-z_][A-Za-z0-9_]*=/ || w=="sudo" || w=="time" || w=="command" || w=="noglob" || w=="nohup") continue
     sub(/.*\//,"",w); return w } return "" }
-{ line=$0; t=0
-  if (line ~ /^: [0-9]+:[0-9]+;/) { t=substr(line,3); sub(/:.*/,"",t); sub(/^: [0-9]+:[0-9]+;/,"",line) }
+{ t=$1+0; line=$0; sub(/^[^\t]*\t/,"",line)
   c=norm(line); if(c==""||c ~ /^[^A-Za-z0-9._-]/) next
   n++; C[n]=c; T[n]=t }
 END{ if(n<N){ N=n } if(N<1) exit 1
@@ -30,7 +129,7 @@ END{ if(n<N){ N=n } if(N<1) exit 1
       else if(v>b3||(v==b3&&v>0&&c<t3)){t3=c;b3=v}
       if(span[c]==1&&v>bf&&v>=2||(span[c]==1&&v==bf&&v>=2&&c<f)){f=c;bf=v}
       if(first[c]==k&&k>0)new++; if(last[c]==k&&k<N-1)ext++ }
-    printf "%d\t%d\t%d\t%d\t%s:%d\t%s:%d\t%s:%d\t%s:%d\t%d\t%d\n",k,tot[k],tt[k,"mn"],tt[k,"mx"],t1,b1,t2,b2,t3,b3,(f==""?"-":f),bf,new,ext } }' "$H") || { echo "history too small to excavate"; exit 1; }
+    printf "%d\t%d\t%d\t%d\t%s:%d\t%s:%d\t%s:%d\t%s:%d\t%d\t%d\n",k,tot[k],tt[k,"mn"],tt[k,"mx"],t1,b1,t2,b2,t3,b3,(f==""?"-":f),bf,new,ext } }') || { echo "history too small to excavate"; exit 1; }
 
 # Stage 3: render
 era() { case $1 in
@@ -39,7 +138,7 @@ era() { case $1 in
  npm|node|yarn|pnpm|npx) echo "The Node Dynasty";; python|python3|pip|pip3|uv) echo "The Serpent Period";;
  brew) echo "The Brewing Age";; curl|wget|http) echo "The Fetch Epoch";; claude) echo "The Age of Machines Talking";;
  make|cargo|go|gcc|cc) echo "The Forging Era";; rm|mv|cp) echo "The Great Rearrangement";; grep|rg|awk|sed) echo "The Pattern Hunt";;
- *) echo "The ${1^} Epoch" 2>/dev/null || echo "The $1 Epoch";; esac; }
+ *) echo "The $(printf %s "${1:0:1}" | tr a-z A-Z)${1:1} Epoch";; esac; }
 date_of() { [ "$1" -gt 0 ] && { date -r "$1" "+%b %Y" 2>/dev/null || date -d "@$1" "+%b %Y"; } || echo "?"; }
 TEX=('░' '▒' '▓' '█' '▚' '▞' '∷' '≋' '▤' '▥'); R=$'\033[0m'
 col() { local h; h=$(printf %s "$1" | cksum | cut -d' ' -f1); echo $(( (h % 14) * 6 + 22 )); }  # earthy-ish 256-colour band
@@ -75,3 +174,101 @@ for ((k=N-1;k>=0;k--)); do IFS='|' read -r _ tot mn mx a b c f new ext <<<"${top
   [ "${f%:*}" != "-" ] && printf '   ☠ fossil   layer %d: %s (%s uses, never seen in any other layer)\n' "$k" "${f%:*}" "${f##*:}"; done
 IFS='|' read -r _ _ _ _ _ _ _ _ new _ <<<"${tops[N-1]}"; printf '   🌱 invasive species in the newest layer: %s new commands\n' "$new"
 ext=0; for r in "${tops[@]}"; do e=${r##*|}; ext=$((ext+e)); done; printf '   🦖 extinct (abandoned: never used again after their layer): %s commands\n\n' "$ext"
+}
+
+cmd_alias() {
+  local used="|" saved c cmd name base n shown=0 total=0 e
+  [ $RAW -eq 0 ] && printf '\n  %sALIAS CANDIDATES%s — commands you keep retyping\n\n' "$B" "$R"
+  while IFS=$'\t' read -r saved c cmd name; do
+    [ -z "$cmd" ] && continue
+    e=$(esc "$cmd"); grep -qsF -- "='$e'" "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.aliases" && continue
+    base=$name; n=2
+    while command -v "$name" >/dev/null 2>&1 || grep -qs "alias $name=" "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.aliases" || case $used in *"|$name|"*) true;; *) false;; esac; do name=$base$n; n=$((n+1)); done
+    used="$used$name|"; shown=$((shown+1)); total=$((total+saved))
+    if [ $RAW -eq 1 ]; then printf "alias %s='%s'\n" "$name" "$e"
+    else printf "  alias %s%s%s='%s'\n  %s%s× typed · saves ~%s keystrokes%s\n\n" "$GRN" "$name" "$R" "$e" "$D" "$c" "$saved" "$R"; fi
+    [ $shown -ge "$TOPN" ] && break
+  done < <(_alias_data)
+  if [ $RAW -eq 0 ]; then
+    [ $shown -eq 0 ] && echo "  Nothing worth aliasing yet (needs a command of 10+ chars typed 3+ times)." ||
+      printf '  %s≈ %s keystrokes (~%s min of typing) recovered.%s\n  Add them:  %sstrata alias --raw >> ~/.zshrc && source ~/.zshrc%s\n\n' "$B" "$total" "$((total/200+1))" "$R" "$CYN" "$R"
+  fi
+}
+
+cmd_typos() {
+  local c a b bn shown=0
+  [ $RAW -eq 0 ] && printf '\n  %sRECURRING TYPOS%s — mistakes you keep making\n\n' "$B" "$R"
+  while IFS=$'\t' read -r c a b bn; do
+    [ -z "$a" ] && continue; command -v "$a" >/dev/null 2>&1 && continue
+    shown=$((shown+1))
+    if [ $RAW -eq 1 ]; then printf "alias %s='%s'\n" "$a" "$b"
+    else printf "  %s%s%s → %s  %s(typed %s×; you use %s %s×)%s\n    alias %s='%s'\n\n" "$RED" "$a" "$R" "$b" "$D" "$c" "$b" "$bn" "$R" "$a" "$b"; fi
+    [ $shown -ge "$TOPN" ] && break
+  done < <(_typos_data)
+  [ $RAW -eq 0 ] && { [ $shown -eq 0 ] && echo "  No recurring typos. Suspiciously good." || printf '  Fix them forever:  %sstrata typos --raw >> ~/.zshrc%s\n\n' "$CYN" "$R"; }
+}
+
+cmd_flows() {
+  local score c seq cmds shown=0 e
+  printf '\n  %sREPEATED WORKFLOWS%s — sequences you run again and again\n\n' "$B" "$R"
+  while IFS=$'\t' read -r score c seq cmds; do
+    [ -z "$seq" ] && continue; shown=$((shown+1)); e=$(esc "$cmds")
+    printf '  %s%s×%s  %s\n      alias flow%s='"'"'%s'"'"'  %s# rename it, edit the arguments%s\n\n' "$YEL" "$c" "$R" "${seq//->/→}" "$shown" "$e" "$D" "$R"
+    [ $shown -ge "$TOPN" ] && break
+  done < <(_flows_data)
+  [ $shown -eq 0 ] && echo "  No repeated sequences yet (needs the same 2-3 step chain 3+ times, within 15 min)."
+  echo
+}
+
+cmd_leaks() {
+  local n kind shown line total lines=""
+  total=$(_leaks_data | cnt)
+  printf '\n  %sSECRETS IN YOUR HISTORY%s — %s\n\n' "$B" "$R" "$H"
+  if [ "$total" -eq 0 ]; then printf '  %s✓ nothing that looks like a credential.%s\n\n' "$GRN" "$R"; return; fi
+  while IFS=$'\t' read -r n kind line; do
+    lines="$lines$n,"
+    [ "$shown" = "" ] && shown=0; shown=$((shown+1))
+    [ $shown -le "$TOPN" ] && printf '  %sline %-5s%s %s%-18s%s %s\n' "$D" "$n" "$R" "$RED" "$kind" "$R" "$line"
+  done < <(_leaks_data)
+  printf '\n  %s%s possible secret(s).%s Secrets are shown redacted; strata never prints them in full.\n' "$B" "$total" "$R"
+  printf '  %sRotate these credentials%s — deleting history does not un-leak anything already synced, backed up or screen-shared.\n' "$YEL" "$R"
+  if [ $SCRUB -eq 0 ]; then printf '  Remove the lines (backup kept):  %sstrata leaks --scrub%s\n\n' "$CYN" "$R"; return; fi
+  [ -t 0 ] || { echo "  --scrub needs an interactive terminal to confirm."; exit 1; }
+  printf '\n  Delete %s line(s) from %s ? (backup: %s.strata-backup) [y/N] ' "$total" "$H" "$H"; read -r ans
+  [ "$ans" = y ] || { echo "  aborted."; return; }
+  cp -p "$H" "$H.strata-backup" && awk -v L=",$lines" 'index(L, "," NR ",")==0' "$H.strata-backup" > "$H.strata-tmp" && cat "$H.strata-tmp" > "$H" && rm -f "$H.strata-tmp"
+  printf '  %s✓ scrubbed.%s Open a new shell (a running shell may write its in-memory history back on exit).\n\n' "$GRN" "$R"
+}
+
+cmd_find() {
+  [ ${#WORDS[@]} -eq 0 ] && { echo "usage: strata find <words...>   e.g. strata find docker prune"; exit 1; }
+  local o ts c cmd shown=0 rows
+  rows=$(load_full | LC_ALL=C awk -F'\t' -v q="${WORDS[*]}" '
+    BEGIN{ n=split(tolower(q),w," ") }
+    { l=$0; sub(/^[^\t]*\t/,"",l); lo=tolower(l); ok=1; for(i=1;i<=n;i++) if(index(lo,w[i])==0){ok=0;break}
+      if(ok){ cnt[l]++; ord[l]=NR; last[l]=$1+0 } }
+    END{ for(l in cnt) printf "%d\t%d\t%d\t%s\n", ord[l], last[l], cnt[l], l }' | sort -t"$(printf '\t')" -k1,1 -rn | head -n "$TOPN")
+  [ -z "$rows" ] && { [ $RAW -eq 0 ] && echo "  nothing in history matches: ${WORDS[*]}"; exit 1; }
+  [ $RAW -eq 1 ] && { printf '%s\n' "$rows" | head -1 | cut -f4-; return; }
+  printf '\n  %smatches for "%s"%s (most recent first)\n\n' "$B" "${WORDS[*]}" "$R"
+  while IFS=$'\t' read -r o ts c cmd; do printf '  %s%s  %3s×%s  %s\n' "$D" "$(sdate "$ts")" "$c" "$R" "$cmd"; done <<<"$rows"
+  printf '\n'
+}
+
+cmd_doctor() {
+  local total na sa nt nl nf
+  total=$(load_full | cnt)
+  na=$(_alias_data | cnt); sa=$(_alias_data | awk -F'\t' '{s+=$1} END{print s+0}')
+  nt=0; while IFS=$'\t' read -r _ a _ _; do [ -n "$a" ] && ! command -v "$a" >/dev/null 2>&1 && nt=$((nt+1)); done < <(_typos_data)
+  nl=$(_leaks_data | cnt); nf=$(_flows_data | cnt)
+  printf '\n  %sSTRATA CHECKUP%s — %s commands in %s\n\n' "$B" "$R" "$total" "$H"
+  printf '  ✂  %-8s %s%s repeated commands%s could be aliases (~%s keystrokes)   %s→ strata alias%s\n' ALIASES "$GRN" "$na" "$R" "$sa" "$CYN" "$R"
+  printf '  ✎  %-8s %s%s recurring typos%s                                       %s→ strata typos%s\n' TYPOS "$YEL" "$nt" "$R" "$CYN" "$R"
+  if [ "$nl" -gt 0 ]; then printf '  🔑 %-8s %s%s possible secret(s) in plaintext!%s                       %s→ strata leaks%s\n' SECRETS "$RED" "$nl" "$R" "$CYN" "$R"
+  else printf '  🔑 %-8s %sclean%s                                                    %s→ strata leaks%s\n' SECRETS "$GRN" "$R" "$CYN" "$R"; fi
+  printf '  ⛓  %-8s %s%s workflows%s you repeat could be one command             %s→ strata flows%s\n' FLOWS "$YEL" "$nf" "$R" "$CYN" "$R"
+  printf '  🔍 %-8s find any past command by keywords                      %s→ strata find <words>%s\n' RECALL "$CYN" "$R"
+  printf '  🪨 %-8s your history as rock layers                            %s→ strata dig%s\n\n' DIG "$CYN" "$R"
+}
+
+case $CMD in dig) cmd_dig;; alias) cmd_alias;; typos) cmd_typos;; flows) cmd_flows;; leaks) cmd_leaks;; find) cmd_find;; doctor) cmd_doctor;; esac
