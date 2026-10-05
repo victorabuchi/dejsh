@@ -15,6 +15,38 @@ has()   { printf '%s' "$1" | grep -qF -- "$2"; }
 hasnt() { ! printf '%s' "$1" | grep -qF -- "$2"; }
 strip() { sed 's/\x1b\[[0-9;]*m//g'; }
 jsonok() { python3 -c 'import sys,json; json.load(sys.stdin)' 2>/dev/null; }
+# Drive an interactive shell through a real pseudo-terminal (some shells only fire prompt hooks on a tty).
+# usage: pty_session HOME XDG_CONFIG_HOME shell [args...]; feeds a fixed list of commands, then exit.
+pty_session() { python3 - "$@" <<'PY'
+import os, pty, sys, time, select, signal
+home, cfg, argv = sys.argv[1], sys.argv[2], sys.argv[3:]
+env = dict(os.environ, HOME=home, XDG_CONFIG_HOME=cfg, TERM="xterm", ZDOTDIR=home)
+pid, fd = pty.fork()
+if pid == 0:
+    os.execvpe(argv[0], argv, env)
+def drain(t):
+    end = time.time() + t
+    while time.time() < end:
+        r, _, _ = select.select([fd], [], [], 0.1)
+        if r:
+            try:
+                if not os.read(fd, 4096): return
+            except OSError: return
+drain(2.5)
+for cmd in ["echo hello", "false", "export API_TOKEN=abc123", "exit"]:
+    os.write(fd, (cmd + "\r").encode()); drain(1.2)
+end = time.time() + 4
+while time.time() < end:
+    try:
+        p, _ = os.waitpid(pid, os.WNOHANG)
+        if p: break
+    except ChildProcessError: break
+    time.sleep(0.1)
+else:
+    try: os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError: pass
+PY
+}
 section() { printf '\n%s\n' "$1"; }
 
 # ---------- fixtures ----------
@@ -172,11 +204,19 @@ out=$("$D" slow --json); t "slow json has seconds" has "$out" '"total_seconds"'
 
 if command -v fish >/dev/null 2>&1; then
   FF=$(mktemp -d); mkdir -p "$FF/.config/fish"; "$D" hook fish > "$FF/.config/fish/config.fish"
-  printf 'echo hello\nfalse\nexport API_TOKEN=abc123\nexit\n' | HOME=$FF XDG_CONFIG_HOME=$FF/.config fish -i >/dev/null 2>&1
+  pty_session "$FF" "$FF/.config" fish -i >/dev/null 2>&1
   jr=$(cat "$FF/.dejsh/journal.tsv" 2>/dev/null)
   t "fish recorder records commands"    has "$jr" "echo hello"
   t "fish recorder captures exit code"  has "$jr" "$(printf '\t1\t')"
   t "fish recorder skips secrets"       hasnt "$jr" "API_TOKEN"
+fi
+if command -v zsh >/dev/null 2>&1; then
+  PZ=$(mktemp -d); "$D" hook zsh > "$PZ/.zshrc"
+  pty_session "$PZ" "$PZ/.config" zsh -i >/dev/null 2>&1
+  jr=$(cat "$PZ/.dejsh/journal.tsv" 2>/dev/null)
+  t "zsh recorder works on a real tty too" has "$jr" "echo hello"
+  t "zsh recorder tty: exit code"          has "$jr" "$(printf '\t1\t')"
+  t "zsh recorder tty: skips secrets"      hasnt "$jr" "API_TOKEN"
 fi
 
 section "shell completions (v0.8)"
