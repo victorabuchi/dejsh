@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# strata — excavate your shell history as geological layers.
+# usage: strata [-l layers] [-w width] [histfile]
+LAYERS=8; WIDTH=64
+while getopts "l:w:h" o; do case $o in l) LAYERS=$OPTARG;; w) WIDTH=$OPTARG;; *) echo "usage: strata [-l layers] [-w width] [histfile]"; exit 1;; esac; done
+shift $((OPTIND-1))
+H=${1:-${HISTFILE:-}}
+for f in "$H" "$HOME/.zsh_history" "$HOME/.bash_history"; do [ -n "$f" ] && [ -r "$f" ] && { H=$f; break; }; done
+[ -r "$H" ] || { echo "no history file found"; exit 1; }
+
+# Stage 1+2: normalise history -> per-layer statistics (awk does the digging)
+DIG=$(LC_ALL=C awk -v N="$LAYERS" '
+function norm(s,  a,k,w){ k=split(s,a,/[ \t]+/)
+  for(i=1;i<=k;i++){ w=a[i]; if(w=="")continue
+    if(w ~ /^[A-Za-z_][A-Za-z0-9_]*=/ || w=="sudo" || w=="time" || w=="command" || w=="noglob" || w=="nohup") continue
+    sub(/.*\//,"",w); return w } return "" }
+{ line=$0; t=0
+  if (line ~ /^: [0-9]+:[0-9]+;/) { t=substr(line,3); sub(/:.*/,"",t); sub(/^: [0-9]+:[0-9]+;/,"",line) }
+  c=norm(line); if(c==""||c ~ /^[^A-Za-z0-9._-]/) next
+  n++; C[n]=c; T[n]=t }
+END{ if(n<N){ N=n } if(N<1) exit 1
+  for(i=1;i<=n;i++){ k=int((i-1)*N/n); cnt[k,C[i]]++; tot[k]++
+    if(!((k,"mn") in tt)||T[i]<tt[k,"mn"])tt[k,"mn"]=T[i]; if(T[i]>tt[k,"mx"])tt[k,"mx"]=T[i]
+    if(!(C[i] in first)||k<first[C[i]])first[C[i]]=k; if(!(C[i] in last)||k>last[C[i]])last[C[i]]=k
+    if(!((k,C[i]) in seen)){seen[k,C[i]]=1; span[C[i]]++} ; all[C[i]]=1 }
+  for(k=0;k<N;k++){ t1=t2=t3=f=""; b1=b2=b3=bf=0; new=ext=0
+    for(c in all){ v=cnt[k,c]+0
+      if(v>b1||(v==b1&&v>0&&c<t1)){t3=t2;b3=b2;t2=t1;b2=b1;t1=c;b1=v}
+      else if(v>b2||(v==b2&&v>0&&c<t2)){t3=t2;b3=b2;t2=c;b2=v}
+      else if(v>b3||(v==b3&&v>0&&c<t3)){t3=c;b3=v}
+      if(span[c]==1&&v>bf&&v>=2||(span[c]==1&&v==bf&&v>=2&&c<f)){f=c;bf=v}
+      if(first[c]==k&&k>0)new++; if(last[c]==k&&k<N-1)ext++ }
+    printf "%d\t%d\t%d\t%d\t%s:%d\t%s:%d\t%s:%d\t%s:%d\t%d\t%d\n",k,tot[k],tt[k,"mn"],tt[k,"mx"],t1,b1,t2,b2,t3,b3,(f==""?"-":f),bf,new,ext } }' "$H") || { echo "history too small to excavate"; exit 1; }
+
+# Stage 3: render
+era() { case $1 in
+ git) echo "The Version Age";; docker|podman|kubectl) echo "The Container Era";; ssh|scp|mosh) echo "The Remote Age";;
+ vim|nvim|nano|emacs|code) echo "The Editor Wars";; ls|cd|pwd|tree|find) echo "The Wandering";;
+ npm|node|yarn|pnpm|npx) echo "The Node Dynasty";; python|python3|pip|pip3|uv) echo "The Serpent Period";;
+ brew) echo "The Brewing Age";; curl|wget|http) echo "The Fetch Epoch";; claude) echo "The Age of Machines Talking";;
+ make|cargo|go|gcc|cc) echo "The Forging Era";; rm|mv|cp) echo "The Great Rearrangement";; grep|rg|awk|sed) echo "The Pattern Hunt";;
+ *) echo "The ${1^} Epoch" 2>/dev/null || echo "The $1 Epoch";; esac; }
+date_of() { [ "$1" -gt 0 ] && { date -r "$1" "+%b %Y" 2>/dev/null || date -d "@$1" "+%b %Y"; } || echo "?"; }
+TEX=('░' '▒' '▓' '█' '▚' '▞' '∷' '≋' '▤' '▥'); R=$'\033[0m'
+col() { local h; h=$(printf %s "$1" | cksum | cut -d' ' -f1); echo $(( (h % 14) * 6 + 22 )); }  # earthy-ish 256-colour band
+tops=(); while IFS=$'\t' read -r k tot mn mx a b c f new ext; do
+  tops[k]="$k|$tot|$mn|$mx|$a|$b|$c|$f|$new|$ext"; done <<<"$DIG"
+N=${#tops[@]}; TOTAL=0; for r in "${tops[@]}"; do t=${r#*|}; TOTAL=$((TOTAL+${t%%|*})); done
+
+printf '\n  \033[1mSTRATA\033[0m — %s commands, %d layers, source: %s\n\n' "$TOTAL" "$N" "$H"
+printf '  \033[38;5;34m%s\033[0m  ← surface (today)\n' "$(printf '▀%.0s' $(seq 1 "$WIDTH"))"
+for ((k=N-1;k>=0;k--)); do
+  IFS='|' read -r _ tot mn mx a b c f new ext <<<"${tops[k]}"
+  tc=${a%:*}; tn=${a##*:}; h=$(( 2 + tot * N * 2 / TOTAL )); [ $h -lt 3 ] && h=3; [ $h -gt 5 ] && h=5
+  pct=$(( tn * 100 / tot )); cc=$(col "$tc"); tx=${TEX[$(( $(printf %s "$tc" | cksum | cut -d' ' -f1) % ${#TEX[@]} ))]}
+  fn=${f%:*}; fc=${f##*:}
+  for ((r=0;r<h;r++)); do
+    line=$(printf "$tx%.0s" $(seq 1 "$WIDTH"))
+    if [ "$fn" != "-" ] && [ $r -eq $((h/2)) ]; then   # embed fossil
+      tag=" ☠ $fn "; pos=$(( ($(printf %s "$fn" | cksum | cut -d' ' -f1) % (WIDTH - ${#tag} - 2)) + 1 ))
+      line="${line:0:pos}${R}\033[1;97;48;5;${cc}m${tag}${R}\033[38;5;${cc}m${line:$((pos+${#tag}))}"
+    fi
+    printf '  \033[38;5;%sm%b%s' "$cc" "$line" "$R"
+    if [ $r -eq 0 ]; then printf '  \033[1m%s\033[0m' "$(era "$tc")"
+    elif [ $r -eq 1 ]; then printf '  %s → %s · %s cmds' "$(date_of "$mn")" "$(date_of "$mx")" "$tot"
+    elif [ $r -eq 2 ]; then printf '  %s %d%%, %s, %s' "$tc" "$pct" "${b%:*}" "${c%:*}"; fi
+    printf '\n'
+  done
+done
+printf '  \033[38;5;94m%s\033[0m  ← bedrock (your first command)\n\n' "$(printf '▔%.0s' $(seq 1 "$WIDTH"))"
+
+# Field notes
+echo "  FIELD NOTES"
+for ((k=N-1;k>=0;k--)); do IFS='|' read -r _ tot mn mx a b c f new ext <<<"${tops[k]}"
+  [ "${f%:*}" != "-" ] && printf '   ☠ fossil   layer %d: %s (%s uses, never seen in any other layer)\n' "$k" "${f%:*}" "${f##*:}"; done
+IFS='|' read -r _ _ _ _ _ _ _ _ new _ <<<"${tops[N-1]}"; printf '   🌱 invasive species in the newest layer: %s new commands\n' "$new"
+ext=0; for r in "${tops[@]}"; do e=${r##*|}; ext=$((ext+e)); done; printf '   🦖 extinct (abandoned: never used again after their layer): %s commands\n\n' "$ext"
