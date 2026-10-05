@@ -9,12 +9,16 @@ and audits your history for wasted keystrokes, risky commands and leaked secrets
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 ![Shell](https://img.shields.io/badge/shell-bash%203.2%2B-4EAA25?logo=gnubash&logoColor=white)
-![Works with](https://img.shields.io/badge/works%20with-zsh%20%7C%20bash-blue)
+![Works with](https://img.shields.io/badge/works%20with-zsh%20%7C%20bash%20%7C%20fish-blue)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)
 ![Network](https://img.shields.io/badge/network-never-informational)
 
 [Quick start](#quick-start) · [Features](#features) · [Install](#install) · [Privacy](#privacy) · [FAQ](#faq)
+
+<br>
+
+<img src="assets/demo.svg" alt="strata checkup, then strata fix recalling that `npm install` fixed `npm start` before" width="780">
 
 </div>
 
@@ -31,7 +35,7 @@ strata fixes that in two layers:
 | **Audit** | Reads the history file you already have. Finds aliases worth making, recurring typos, secrets sitting in plaintext, risky commands, repeated workflows, bad habits. | No. Run it now. |
 | **Memory** | An opt-in recorder adds exit code, duration and directory to each command. On top of that: personal error-fix memory, "where did I leave off", scripts from what just worked. | One command: `strata hook --install` |
 
-It is a single bash script. No dependencies, no network access, and it writes nothing unless you ask.
+It is a single bash script for zsh, bash and fish. No dependencies, no network access, and it writes nothing unless you ask.
 
 ## Quick start
 
@@ -84,6 +88,8 @@ $ strata fix
 ```
 
 It learns from your own failures. A failure followed by the commands you ran before it succeeded becomes a remembered fix. Nothing is hard-coded, so it works for your stack, your errors and your fixes.
+
+Add `--run` to apply the remembered fix: `strata fix --run` shows the command, asks `[y/N]`, runs it in the directory where the failure happened, and tells you what to re-run. It never runs anything without asking, and only offers single-command fixes.
 
 #### `strata resume`
 
@@ -210,6 +216,12 @@ $ strata compare senior-dev.tsv
 curl -fsSL https://raw.githubusercontent.com/victorabuchi/strata/main/install.sh | bash
 ```
 
+**Homebrew:**
+
+```sh
+brew install victorabuchi/strata/strata
+```
+
 **From a clone:**
 
 ```sh
@@ -232,6 +244,8 @@ strata [command] [options]
   -n N         rows to show (default 10)
   --raw        machine output: alias lines only, or the top match for `find`
   --scrub      with `leaks`: delete flagged lines (asks first, keeps a backup)
+  --json       machine-readable output (alias, typos, flows, leaks, fixes, find, export, and the checkup)
+  --run        with `fix`: offer to apply the remembered fix (asks first)
   --since 30m  with `script`: only commands from the last 30m / 2h / 1d
   --all        with `resume`: every project
   -l N -w N    with `dig`: number of layers, width
@@ -243,6 +257,7 @@ Run `strata help` for the full command list.
 
 - **zsh:** `setopt EXTENDED_HISTORY` in `~/.zshrc`
 - **bash:** `export HISTTIMEFORMAT="%F %T "` in `~/.bashrc`
+- **fish:** nothing to do, fish records timestamps by default
 
 Without timestamps everything still works. `flows` just can't filter by time gap, and `dig` and `wrapped` have less to show. The recorder makes this unnecessary for anything it records.
 
@@ -274,7 +289,7 @@ It learns from failures you've already had since installing the recorder. It nee
 No. It is pattern-based and misses secrets with no recognisable shape. Treat it as a smoke detector, not an audit.
 
 **Does it work with fish?**
-Not yet. See the roadmap.
+Yes. strata reads `~/.local/share/fish/fish_history`, and `strata hook fish --install` adds the recorder to `~/.config/fish/config.fish`. The fish recorder is newer than the zsh and bash ones, so please open an issue if it misbehaves.
 
 **Is it safe to run `strata alias --raw >> ~/.zshrc`?**
 It skips names that already exist as commands or aliases and never emits commands that look like they contain secrets. Skim the output first if you like. It's plain alias lines.
@@ -287,11 +302,12 @@ It skips names that already exist as commands or aliases and never emits command
 
 ## Roadmap
 
-- [ ] fish shell support
-- [ ] `strata fix --run` to apply the remembered fix after confirmation
-- [ ] `--json` output for every command
-- [ ] more secret patterns (cloud providers, payment keys)
-- [ ] a Homebrew formula
+Shipped in v0.4: fish support, `fix --run`, `--json`, Homebrew, and ten more secret patterns (Stripe, Google, SendGrid, npm, PyPI, Hugging Face, DigitalOcean, GitLab, JWT, AWS temporary keys).
+
+- [ ] `--json` for the remaining commands (`danger`, `coach`, `slow`, `resume`)
+- [ ] `fix --run` for multi-step fixes
+- [ ] CI that runs the test suite on macOS bash 3.2 and Linux
+- [ ] Shell completions
 
 ## Contributing
 

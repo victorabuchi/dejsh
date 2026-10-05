@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # strata — your shell history, audited: aliases, typos, leaked secrets, repeated workflows, recall.
-VERSION=0.3.0
-LAYERS=8; WIDTH=64; TOPN=10; RAW=0; SCRUB=0; ALL=0; INSTALL=0; SINCE=0; HFILE=${STRATA_HIST:-}
+VERSION=0.4.0
+LAYERS=8; WIDTH=64; TOPN=10; RAW=0; SCRUB=0; JSON=0; RUN=0; ALL=0; INSTALL=0; SINCE=0; HFILE=${STRATA_HIST:-}
 B=$'\033[1m'; D=$'\033[2m'; R=$'\033[0m'; GRN=$'\033[32m'; YEL=$'\033[33m'; RED=$'\033[31m'; CYN=$'\033[36m'
 
 usage() { cat <<U
@@ -16,7 +16,7 @@ ${B}strata${R} $VERSION — find what's fixable in your shell history
   strata dig               your history as geological layers (-l layers, -w width)
 
 ${B}needs the recorder${R} (strata hook --install — adds cwd, exit code, duration):
-  strata fix               the last command failed — what did you do about it before?
+  strata fix [--run]       the last command failed — what did you do about it before?
   strata fixes             your personal troubleshooting memory
   strata resume [--all]    where did I leave off in this project (or in all of them)?
   strata slow              where your terminal time actually goes
@@ -29,7 +29,8 @@ ${B}history only${R}:
   strata export            privacy-safe profile of the tools you use (no arguments, no paths)
   strata compare FILE      what a teammate's profile uses that you've never touched
 
-options: -f FILE (history file)  -n N (rows, default 10)  --raw (machine output, for >> ~/.zshrc)
+options: -f FILE (history file)  -n N (rows, default 10)  --raw (for >> ~/.zshrc)
+         --json (alias typos flows leaks fixes find export doctor)  --run (with fix: offer to re-apply)
 U
 }
 
@@ -38,27 +39,35 @@ case $CMD in dig|alias|typos|flows|leaks|find|doctor|hook|fixes|fix|resume|slow|
 WORDS=()
 while [ $# -gt 0 ]; do case $1 in
   -l) LAYERS=$2; shift 2;; -w) WIDTH=$2; shift 2;; -f) HFILE=$2; shift 2;; -n) TOPN=$2; shift 2;;
-  --raw) RAW=1; shift;; --scrub) SCRUB=1; shift;; --all) ALL=1; shift;; --install) INSTALL=1; shift;;
+  --raw) RAW=1; shift;; --json) JSON=1; shift;; --run) RUN=1; shift;; --scrub) SCRUB=1; shift;; --all) ALL=1; shift;; --install) INSTALL=1; shift;;
   --since) v=$2; shift 2; nu=${v%[mhd]}; case ${v#$nu} in m) SINCE=$((nu*60));; h) SINCE=$((nu*3600));; d) SINCE=$((nu*86400));; *) SINCE=$((nu*60));; esac;; -h|--help) usage; exit 0;; *) WORDS+=("$1"); shift;; esac; done
 case $CMD in dig|doctor|alias|typos|flows|leaks|danger|coach|wrapped|export) [ -n "${WORDS[0]:-}" ] && [ -f "${WORDS[0]}" ] && HFILE=${WORDS[0]};; esac
 H=
-for f in "$HFILE" "${HISTFILE:-}" "$HOME/.zsh_history" "$HOME/.bash_history"; do [ -n "$f" ] && [ -r "$f" ] && { H=$f; break; }; done
+for f in "$HFILE" "${HISTFILE:-}" "$HOME/.zsh_history" "$HOME/.bash_history" "$HOME/.local/share/fish/fish_history"; do [ -n "$f" ] && [ -r "$f" ] && { H=$f; break; }; done
 case $CMD in hook|fix|fixes|resume|slow) ;; script) [ -s "${STRATA_JOURNAL:-$HOME/.strata/journal.tsv}" ] || [ -n "$H" ] || { echo "strata: no history file found"; exit 1; };;
   *) [ -n "$H" ] || { echo "strata: no history file found (try -f FILE)"; exit 1; };; esac
 
 # ts<TAB>full command. Understands zsh EXTENDED_HISTORY and bash HISTTIMEFORMAT; skips strata's own invocations.
 load_full() { local hf=${1:-$H}; LC_ALL=C awk '
+  function emit(t,line){ gsub(/^[ \t]+|[ \t]+$/,"",line); if (line=="" || line ~ /^strata( |$)/) return; print t "\t" line }
   /^#[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]+$/ { bt=substr($0,2); next }
+  /^- cmd: / { pc=substr($0,8); gsub(/\\n/," ",pc); gsub(/\\\\/,"\\",pc); fish=1; next }
+  fish && /^  when: [0-9]+$/ { emit(substr($0,9)+0,pc); pc=""; next }
+  fish { next }
   { t=0; line=$0
     if (line ~ /^: [0-9]+:[0-9]+;/) { t=substr(line,3); sub(/:.*/,"",t); sub(/^: [0-9]+:[0-9]+;/,"",line) }
     else if (bt!="") { t=bt; bt="" }
-    gsub(/^[ \t]+|[ \t]+$/,"",line); if (line=="" || line ~ /^strata( |$)/) next
-    print t "\t" line }' "$hf"; }
+    emit(t,line) }' "$hf"; }
 
 q="'"
 esc() { printf %s "${1//$q/$q\\$q$q}"; }
 sdate() { [ "${1:-0}" -gt 0 ] 2>/dev/null && { date -r "$1" "+%b %d" 2>/dev/null || date -d "@$1" "+%b %d" 2>/dev/null; } || printf '      '; }
 cnt() { wc -l | tr -d ' '; }
+json_rows() { LC_ALL=C awk -F'\t' -v f="$1" '
+  function esc(s){ gsub(/\\/,"\\\\",s); gsub(/"/,"\\\"",s); gsub(/\t/,"\\t",s); return s }
+  BEGIN{ n=split(f,F,","); printf "[" }
+  { printf "%s{", (NR>1?",":""); for(i=1;i<=n;i++){ if(F[i] ~ /^#/) printf "%s\"%s\":%d", (i>1?",":""), substr(F[i],2), $i+0; else printf "%s\"%s\":\"%s\"", (i>1?",":""), F[i], esc($i) } printf "}" }
+  END{ print "]" }'; }
 
 # ---------- data stages (machine rows) ----------
 _alias_data() { load_full | LC_ALL=C awk -F'\t' '
@@ -109,7 +118,18 @@ _leaks_data() { LC_ALL=C awk -v Q="'" '
   function rd(kind,v,  p,shown){ if(v==""||length(v)<4) return 0; p=index(line,v); if(!p) return 0
     shown=substr(line,1,p-1) "<" substr(v,1,3) "..." length(v) ">" substr(line,p+length(v)); if(length(shown)>100) shown=substr(shown,1,97) "..."
     print NR "\t" kind "\t" shown; return 1 }
-  { line=$0; sub(/^: [0-9]+:[0-9]+;/,"",line); if(line ~ /^strata( |$)/) next; lo=tolower(line)
+  function pat(re,minlen,kind){ if(match(line,re)&&RLENGTH>=minlen&&rd(kind,substr(line,RSTART,RLENGTH))) return 1; return 0 }
+  { line=$0; sub(/^: [0-9]+:[0-9]+;/,"",line); sub(/^- cmd: /,"",line); if(line ~ /^strata( |$)/) next; lo=tolower(line)
+    if(pat("(sk|rk)_live_[A-Za-z0-9]+",24,"Stripe live key")) next
+    if(pat("AIza[0-9A-Za-z_-]+",39,"Google API key")) next
+    if(pat("ASIA[0-9A-Z]+",20,"AWS temporary key")) next
+    if(pat("SG\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+",60,"SendGrid key")) next
+    if(pat("npm_[A-Za-z0-9]+",40,"npm token")) next
+    if(pat("hf_[A-Za-z0-9]+",34,"Hugging Face token")) next
+    if(pat("pypi-[A-Za-z0-9_-]+",50,"PyPI token")) next
+    if(pat("dop_v1_[a-f0-9]+",60,"DigitalOcean token")) next
+    if(pat("glpat-[A-Za-z0-9_-]+",26,"GitLab token")) next
+    if(pat("eyJ[A-Za-z0-9_-]+\\.eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+",40,"JWT")) next
     if(match(line,/AKIA[0-9A-Z]+/)&&RLENGTH==20&&rd("AWS access key",substr(line,RSTART,RLENGTH))) next
     if(match(line,/gh[pousr]_[A-Za-z0-9]+/)&&RLENGTH>=30&&rd("GitHub token",substr(line,RSTART,RLENGTH))) next
     if(match(line,/github_pat_[A-Za-z0-9_]+/)&&rd("GitHub token",substr(line,RSTART,RLENGTH))) next
@@ -193,6 +213,7 @@ ext=0; for r in "${tops[@]}"; do e=${r##*|}; ext=$((ext+e)); done; printf '   �
 }
 
 cmd_alias() {
+  [ $JSON -eq 1 ] && { _alias_data | head -n "$TOPN" | json_rows '#keystrokes_saved,#times_typed,command,suggested_name'; return; }
   local used="|" saved c cmd name base n shown=0 total=0 e
   [ $RAW -eq 0 ] && printf '\n  %sALIAS CANDIDATES%s — commands you keep retyping\n\n' "$B" "$R"
   while IFS=$'\t' read -r saved c cmd name; do
@@ -212,6 +233,7 @@ cmd_alias() {
 }
 
 cmd_typos() {
+  [ $JSON -eq 1 ] && { _typos_data | while IFS=$'\t' read -r c a b bn; do command -v "$a" >/dev/null 2>&1 || printf '%s\t%s\t%s\t%s\n' "$c" "$a" "$b" "$bn"; done | head -n "$TOPN" | json_rows '#times_typed,typo,correct,#correct_times'; return; }
   local c a b bn shown=0
   [ $RAW -eq 0 ] && printf '\n  %sRECURRING TYPOS%s — mistakes you keep making\n\n' "$B" "$R"
   while IFS=$'\t' read -r c a b bn; do
@@ -225,6 +247,7 @@ cmd_typos() {
 }
 
 cmd_flows() {
+  [ $JSON -eq 1 ] && { _flows_data | head -n "$TOPN" | json_rows '#score,#times,sequence,commands'; return; }
   local score c seq cmds shown=0 e
   printf '\n  %sREPEATED WORKFLOWS%s — sequences you run again and again\n\n' "$B" "$R"
   while IFS=$'\t' read -r score c seq cmds; do
@@ -237,6 +260,7 @@ cmd_flows() {
 }
 
 cmd_leaks() {
+  [ $JSON -eq 1 ] && { _leaks_data | json_rows '#line,kind,redacted_preview'; return; }
   local n kind shown line total lines=""
   total=$(_leaks_data | cnt)
   printf '\n  %sSECRETS IN YOUR HISTORY%s — %s\n\n' "$B" "$R" "$H"
@@ -252,7 +276,7 @@ cmd_leaks() {
   [ -t 0 ] || { echo "  --scrub needs an interactive terminal to confirm."; exit 1; }
   printf '\n  Delete %s line(s) from %s ? (backup: %s.strata-backup) [y/N] ' "$total" "$H" "$H"; read -r ans
   [ "$ans" = y ] || { echo "  aborted."; return; }
-  cp -p "$H" "$H.strata-backup" && awk -v L=",$lines" 'index(L, "," NR ",")==0' "$H.strata-backup" > "$H.strata-tmp" && cat "$H.strata-tmp" > "$H" && rm -f "$H.strata-tmp"
+  cp -p "$H" "$H.strata-backup" && awk -v L=",$lines" 'index(L, "," NR ",")>0 { d=1; next } d && /^  when: [0-9]+$/ { d=0; next } { d=0; print }' "$H.strata-backup" > "$H.strata-tmp" && cat "$H.strata-tmp" > "$H" && rm -f "$H.strata-tmp"
   printf '  %s✓ scrubbed.%s Open a new shell (a running shell may write its in-memory history back on exit).\n\n' "$GRN" "$R"
 }
 
@@ -264,7 +288,8 @@ cmd_find() {
     { l=$0; sub(/^[^\t]*\t/,"",l); lo=tolower(l); ok=1; for(i=1;i<=n;i++) if(index(lo,w[i])==0){ok=0;break}
       if(ok){ cnt[l]++; ord[l]=NR; last[l]=$1+0 } }
     END{ for(l in cnt) printf "%d\t%d\t%d\t%s\n", ord[l], last[l], cnt[l], l }' | sort -t"$(printf '\t')" -k1,1 -rn | head -n "$TOPN")
-  [ -z "$rows" ] && { [ $RAW -eq 0 ] && echo "  nothing in history matches: ${WORDS[*]}"; exit 1; }
+  [ -z "$rows" ] && { [ $JSON -eq 1 ] && { echo '[]'; exit 1; }; [ $RAW -eq 0 ] && echo "  nothing in history matches: ${WORDS[*]}"; exit 1; }
+  [ $JSON -eq 1 ] && { printf '%s\n' "$rows" | json_rows '#order,#last_run,#times,command'; return; }
   [ $RAW -eq 1 ] && { printf '%s\n' "$rows" | head -1 | cut -f4-; return; }
   printf '\n  %smatches for "%s"%s (most recent first)\n\n' "$B" "${WORDS[*]}" "$R"
   while IFS=$'\t' read -r o ts c cmd; do printf '  %s%s  %3s×%s  %s\n' "$D" "$(sdate "$ts")" "$c" "$R" "$cmd"; done <<<"$rows"
@@ -273,6 +298,10 @@ cmd_find() {
 
 cmd_doctor() {
   local total na sa nt nl nf
+  if [ $JSON -eq 1 ]; then
+    nt=0; while IFS=$'\t' read -r _ a _ _; do [ -n "$a" ] && ! command -v "$a" >/dev/null 2>&1 && nt=$((nt+1)); done < <(_typos_data)
+    printf '{"history":"%s","commands":%s,"alias_candidates":%s,"keystrokes_saveable":%s,"typos":%s,"possible_secrets":%s,"workflows":%s,"recorder":%s}\n' "$H" "$(load_full | cnt)" "$(_alias_data | cnt)" "$(_alias_data | awk -F'\t' '{s+=$1} END{print s+0}')" "$nt" "$(_leaks_data | cnt)" "$(_flows_data | cnt)" "$([ -s "$JOURNAL" ] && echo true || echo false)"; return
+  fi
   total=$(load_full | cnt)
   na=$(_alias_data | cnt); sa=$(_alias_data | awk -F'\t' '{s+=$1} END{print s+0}')
   nt=0; while IFS=$'\t' read -r _ a _ _; do [ -n "$a" ] && ! command -v "$a" >/dev/null 2>&1 && nt=$((nt+1)); done < <(_typos_data)
@@ -340,9 +369,24 @@ trap '_strata_debug' DEBUG; PROMPT_COMMAND="_strata_post${PROMPT_COMMAND:+;$PROM
 # <<< strata recorder <<<
 Z
 ;;
-  *) echo "usage: strata hook [zsh|bash] [--install]"; exit 1;; esac
+  fish) IFS= read -r -d '' snippet <<'Z' || true
+# >>> strata recorder (fish) >>>
+mkdir -p ~/.strata; chmod 700 ~/.strata
+test -e ~/.strata/journal.tsv; or begin; touch ~/.strata/journal.tsv; chmod 600 ~/.strata/journal.tsv; end
+function _strata_record --on-event fish_postexec
+    set -l rc $status
+    set -l c (string join ' ' -- $argv | string replace -a \t ' ')
+    set -l lc (string lower -- $c)
+    string match -qr '^(strata| )|token|secret|passw|apikey|api_key|bearer|akia|private key' -- $lc; and return
+    set -l d (math -s0 "$CMD_DURATION / 1000")
+    printf '%s\t%s\t%s\t%s\t%s\n' (math (date +%s) - $d) $rc $d $PWD $c >> ~/.strata/journal.tsv
+end
+# <<< strata recorder <<<
+Z
+;;
+  *) echo "usage: strata hook [zsh|bash|fish] [--install]"; exit 1;; esac
   if [ $INSTALL -eq 0 ]; then printf '%s\n' "$snippet"; return; fi
-  rc=$HOME/.${sh}rc
+  case $sh in fish) rc=$HOME/.config/fish/config.fish; mkdir -p "$HOME/.config/fish";; *) rc=$HOME/.${sh}rc;; esac
   if grep -qs 'strata recorder' "$rc"; then printf '  recorder already installed in %s\n' "$rc"; return; fi
   command -v strata >/dev/null 2>&1 || printf '  %snote:%s `strata` is not on your PATH yet, so `strata hook` calls will not work in new shells until it is.\n' "$YEL" "$R"
   printf '\n%s\n' "$snippet" >> "$rc"
@@ -364,6 +408,7 @@ _fixes_data() { load_journal | LC_ALL=C awk -F'\t' "$AWK_KEY"'
     for(k in nf) printf "%d\t%s\t%s\t%d\n", nf[k], k, (k in bf?bf[k]:"-"), bc[k]+0 }' | sort -t"$TAB" -k1,1 -rn; }
 
 cmd_fixes() {
+  [ $JSON -eq 1 ] && { need_journal; _fixes_data | awk -F'\t' '$1>=2' | head -n "$TOPN" | json_rows '#failures,command,fix,#fix_worked'; return; }
   need_journal; local nf k fix fc shown=0
   printf '\n  %sYOUR TROUBLESHOOTING MEMORY%s — what you did last time it broke\n\n' "$B" "$R"
   while IFS=$'\t' read -r nf k fix fc; do
@@ -388,6 +433,13 @@ cmd_fix() {
   if [ -n "$row" ]; then IFS=$'\t' read -r nf _ fix fc <<<"$row"
     printf '  Last time `%s` failed, you ran:\n    %s%s%s   %s(worked %s of %s times)%s\n\n' "$key" "$GRN" "$fix" "$R" "$D" "$fc" "$nf" "$R"
   else printf '  No learned fix for `%s` yet. Once you fix it, strata remembers how.\n\n' "$key"; fi
+  if [ $RUN -eq 1 ] && [ -n "$row" ]; then
+    case $fix in "("*) echo "  Nothing to apply: the remembered fix is simply re-running the command."; return;;
+      *" ; "*) echo "  --run only applies fixes that are a single command (this one is a sequence)."; return;; esac
+    [ -t 0 ] || { echo "  --run needs an interactive terminal so it can ask first."; return 1; }
+    printf '  Run `%s` in %s now? [y/N] ' "$fix" "${cwd/#$HOME/~}"; read -r ans
+    if [ "$ans" = y ]; then ( cd "$cwd" 2>/dev/null && bash -c "$fix" ) && printf '\n  %s✓ done.%s Now re-run: %s\n\n' "$GRN" "$R" "$cmd" || printf '\n  %sthe fix itself failed.%s\n\n' "$RED" "$R"; else echo "  skipped."; fi
+  fi
 }
 
 # ---------- resume: where did I leave off? ----------
@@ -533,7 +585,7 @@ cmd_wrapped() {
 _keys_data() { local f=${1:-$H}
   if [ "$(head -c 4000 "$f" | awk -F'\t' 'NF==2 && $2 ~ /^[0-9]+$/ {g++} END{print (g>0 && g==NR)}')" = 1 ]; then cat "$f"; return; fi
   load_full "$f" | LC_ALL=C awk -F'\t' "$AWK_KEY"'{ l=$0; sub(/^[^\t]*\t/,"",l); k=ckey(l); if(k!=""&&!triv(k)) n[k]++ } END{ for(k in n) if(n[k]>=2) printf "%s\t%d\n", k, n[k] }' | sort -t"$TAB" -k2,2 -rn; }
-cmd_export() { _keys_data; }
+cmd_export() { if [ $JSON -eq 1 ]; then _keys_data | json_rows 'tool,#count'; else _keys_data; fi; }
 cmd_compare() {
   local other=${WORDS[0]:-}; [ -r "$other" ] || { echo "usage: strata compare THEIR_PROFILE   (they run: strata export > profile.tsv)"; exit 1; }
   local mine theirs; mine=$(mktemp); theirs=$(mktemp); _keys_data "$H" > "$mine"; _keys_data "$other" > "$theirs"
