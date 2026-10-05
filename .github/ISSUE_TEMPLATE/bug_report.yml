@@ -1,0 +1,17 @@
+name: Bug report
+description: Something doesn't work as documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes: { label: What happened, description: What you ran and what you saw, placeholder: "dejsh fix printed nothing after a failed command" }
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes: { label: What you expected }
+  - type: input
+    id: env
+    attributes: { label: "Shell, OS, and `dejsh --version`", placeholder: "zsh 5.9, macOS 15, dejsh 0.6.0" }
+    validations: { required: true }
+  - type: markdown
+    attributes: { value: "**Do not paste your history file or journal.** They can contain secrets. A few sanitised lines are enough." }

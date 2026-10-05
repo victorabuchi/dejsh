@@ -7,6 +7,7 @@
 Learns how you fix errors, shows where you left off, turns what worked into scripts,<br>
 and audits your history for wasted keystrokes, risky commands and leaked secrets.
 
+[![CI](https://github.com/victorabuchi/dejsh/actions/workflows/ci.yml/badge.svg)](https://github.com/victorabuchi/dejsh/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 ![Shell](https://img.shields.io/badge/shell-bash%203.2%2B-4EAA25?logo=gnubash&logoColor=white)
 ![Works with](https://img.shields.io/badge/works%20with-zsh%20%7C%20bash%20%7C%20fish-blue)
@@ -308,12 +309,11 @@ Shipped in v0.4: fish support, `fix --run`, `--json`, Homebrew, and ten more sec
 
 - [ ] `--json` for the remaining commands (`danger`, `coach`, `slow`, `resume`)
 - [ ] `fix --run` for multi-step fixes
-- [ ] CI that runs the test suite on macOS bash 3.2 and Linux
 - [ ] Shell completions
 
 ## Contributing
 
-Issues and pull requests are welcome. The whole tool is one script, and each command is a small, independent function, so it's easy to add one. Please test on macOS's default bash 3.2 (`/bin/bash`), since that's the most restrictive target.
+Issues and pull requests are welcome. The whole tool is one script, and each command is a small, independent function, so it's easy to add one. See [CONTRIBUTING.md](CONTRIBUTING.md). Run `bash tests/run.sh` before opening a PR; CI runs it on Ubuntu and macOS.
 
 ## License
 
