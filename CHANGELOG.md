@@ -2,6 +2,13 @@
 
 All notable changes. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.7.0]
+- `alias` now suggests stem aliases for commands whose last argument varies (`git commit -m` instead of one frozen message).
+- `flows` no longer freezes one particular argument (like a commit message) into a suggested macro.
+- `--json` added to `danger`, `coach`, `slow` and `resume`.
+- Tests grew to 87 checks, passing on Ubuntu and macOS (including macOS bash 3.2).
+- Added CHANGELOG, SECURITY, CONTRIBUTING, issue and PR templates.
+
 ## [0.6.0]
 - Renamed the project to **dejsh** (déjà vu + sh). Config dir is `~/.dejsh`; env vars are `DEJSH_HIST` and `DEJSH_JOURNAL`.
 - Added an automated test suite (`tests/run.sh`, 74 checks) and CI on Ubuntu and macOS.

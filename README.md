@@ -135,7 +135,7 @@ These work immediately, from your existing history file.
 
 | Command | Solves | Output |
 |---|---|---|
-| `dejsh alias` | Retyping the same long commands | Ready-to-paste aliases ranked by keystrokes saved. Avoids names that clash with real commands or your existing aliases. Never suggests a command containing a secret. |
+| `dejsh alias` | Retyping the same long commands | Ready-to-paste aliases ranked by keystrokes saved. Avoids names that clash with real commands or your existing aliases. Never suggests a command containing a secret. When the last argument varies (like `git commit -m "..."`), it suggests an alias for the stable part (`alias gcm='git commit -m'`) and marks it "add your argument". |
 | `dejsh typos` | Mistyping `git`, `docker`, `kubectl` | A fix-alias for each recurring typo (`gti` → `git`). |
 | `dejsh leaks` | A token or password pasted into a command once | Redacted findings for AWS keys, GitHub tokens, `sk-` API keys, Bearer tokens, `KEY=` exports, DB passwords, `user:pass@` URLs. `--scrub` deletes the lines (backup kept). |
 | `dejsh flows` | Running the same 3 commands in a row | The repeated chain and a one-line alias for it. |
@@ -247,7 +247,7 @@ dejsh [command] [options]
   -n N         rows to show (default 10)
   --raw        machine output: alias lines only, or the top match for `find`
   --scrub      with `leaks`: delete flagged lines (asks first, keeps a backup)
-  --json       machine-readable output (alias, typos, flows, leaks, fixes, find, export, and the checkup)
+  --json       machine-readable output (every analysis command; not `script`, `wrapped`, `dig`, `hook`)
   --run        with `fix`: offer to apply the remembered fix (asks first)
   --since 30m  with `script`: only commands from the last 30m / 2h / 1d
   --all        with `resume`: every project
@@ -305,11 +305,11 @@ It skips names that already exist as commands or aliases and never emits command
 
 ## Roadmap
 
-Shipped in v0.4: fish support, `fix --run`, `--json`, Homebrew, and ten more secret patterns (Stripe, Google, SendGrid, npm, PyPI, Hugging Face, DigitalOcean, GitLab, JWT, AWS temporary keys).
-
-- [ ] `--json` for the remaining commands (`danger`, `coach`, `slow`, `resume`)
 - [ ] `fix --run` for multi-step fixes
-- [ ] Shell completions
+- [ ] Shell completions (zsh, bash, fish)
+- [ ] A short recorded demo GIF
+
+Ideas and votes welcome in the issues. See the [CHANGELOG](CHANGELOG.md) for what has shipped.
 
 ## Contributing
 
