@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # dejsh — your shell history, audited: aliases, typos, leaked secrets, repeated workflows, recall.
-VERSION=0.6.0
+VERSION=0.7.0
 LAYERS=8; WIDTH=64; TOPN=10; RAW=0; SCRUB=0; JSON=0; RUN=0; ALL=0; INSTALL=0; SINCE=0; HFILE=${DEJSH_HIST:-}
 B=$'\033[1m'; D=$'\033[2m'; R=$'\033[0m'; GRN=$'\033[32m'; YEL=$'\033[33m'; RED=$'\033[31m'; CYN=$'\033[36m'
 
@@ -78,8 +78,12 @@ _alias_data() { load_full | LC_ALL=C awk -F'\t' '
   { l=$0; sub(/^[^\t]*\t/,"",l); lo=tolower(l)
     if(length(l)<10||length(l)>300||l ~ /^(alias|export|source|\.) /) next
     if(lo ~ /(token|secret|passw|api_?key|bearer|akia|sk-|private key)/) next
-    c[l]++ }
-  END{ for(l in c) if(c[l]>=3){ n=mk(l); s=c[l]*(length(l)-length(n)); if(s>=40) printf "%d\t%d\t%s\t%s\n", s, c[l], l, n } }' | sort -t"$(printf '\t')" -k1,1 -rn; }
+    c[l]++
+    if(match(l,/ -[A-Za-z-]+ +("[^"]*"|\x27[^\x27]*\x27|[^ -][^ ]*)$/)){ p=RSTART; rest=substr(l,p); match(rest,/^ -[A-Za-z-]+/); st=substr(l,1,p-1) substr(rest,1,RLENGTH)
+      if(length(st)>=8&&split(st,pp,/[ \t]+/)>=2){ sc[st]++; if(!((st SUBSEP l) in sd)){ sd[st SUBSEP l]=1; sn[st]++ } } } }
+  END{ for(st in sc) if(sc[st]>=5&&sn[st]>=3){ n=mk(st); s=sc[st]*(length(st)-length(n)); if(s>=40){ printf "%d\t%d\t%s\t%s\t1\n", s, sc[st], st, n; chosen[st]=1 } }
+    for(l in c) if(c[l]>=3){ skip=0; for(st in chosen) if(index(l,st " ")==1) skip=1; if(skip) continue
+      n=mk(l); s=c[l]*(length(l)-length(n)); if(s>=40) printf "%d\t%d\t%s\t%s\t0\n", s, c[l], l, n } }' | sort -t"$(printf '\t')" -k1,1 -rn; }
 
 _typos_data() { load_full | LC_ALL=C awk -F'\t' '
   function osa(a,b,  la,lb,i,j,c,d){ la=length(a); lb=length(b)
@@ -103,8 +107,8 @@ _flows_data() { load_full | LC_ALL=C awk -F'\t' '
     sub(/.*\//,"",w); if(w==""||(w in triv)||w ~ /^[^A-Za-z0-9]/) next
     key=w; if((w in sub_)&&wi<k&&a[wi+1] ~ /^[a-z][a-z0-9:_-]*$/&&length(a[wi+1])<=14) key=w " " a[wi+1]
     m++; K[m]=key; Tm[m]=t; fc[key SUBSEP l]++ }
-  END{ for(x in fc){ split(x,p,SUBSEP); if(fc[x]>best[p[1]]){best[p[1]]=fc[x]; rep[p[1]]=p[2]} }
-    for(x in best) if(best[x]<2) rep[x]=x
+  END{ for(x in fc){ split(x,p,SUBSEP); tot[p[1]]+=fc[x]; dc[p[1]]++; if(fc[x]>best[p[1]]){best[p[1]]=fc[x]; rep[p[1]]=p[2]} }
+    for(x in best) if(best[x]<2||dc[x]>3&&dc[x]/tot[x]>0.3) rep[x]=x
     for(n=3;n>=2;n--){ delete cn; delete cs
       for(i=1;i+n-1<=m;i++){ if(Tm[i]>0&&Tm[i+n-1]>0&&Tm[i+n-1]-Tm[i]>900) continue
         same=1; seq=K[i]; cmds=rep[K[i]]
@@ -213,17 +217,17 @@ ext=0; for r in "${tops[@]}"; do e=${r##*|}; ext=$((ext+e)); done; printf '   �
 }
 
 cmd_alias() {
-  [ $JSON -eq 1 ] && { _alias_data | head -n "$TOPN" | json_rows '#keystrokes_saved,#times_typed,command,suggested_name'; return; }
-  local used="|" saved c cmd name base n shown=0 total=0 e
+  [ $JSON -eq 1 ] && { _alias_data | head -n "$TOPN" | json_rows '#keystrokes_saved,#times_typed,command,suggested_name,#takes_argument'; return; }
+  local used="|" saved c cmd name base n shown=0 total=0 e stem
   [ $RAW -eq 0 ] && printf '\n  %sALIAS CANDIDATES%s — commands you keep retyping\n\n' "$B" "$R"
-  while IFS=$'\t' read -r saved c cmd name; do
+  while IFS=$'\t' read -r saved c cmd name stem; do
     [ -z "$cmd" ] && continue
     e=$(esc "$cmd"); grep -qsF -- "='$e'" "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.aliases" && continue
     base=$name; n=2
     while command -v "$name" >/dev/null 2>&1 || grep -qs "alias $name=" "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.aliases" || case $used in *"|$name|"*) true;; *) false;; esac; do name=$base$n; n=$((n+1)); done
     used="$used$name|"; shown=$((shown+1)); total=$((total+saved))
     if [ $RAW -eq 1 ]; then printf "alias %s='%s'\n" "$name" "$e"
-    else printf "  alias %s%s%s='%s'\n  %s%s× typed · saves ~%s keystrokes%s\n\n" "$GRN" "$name" "$R" "$e" "$D" "$c" "$saved" "$R"; fi
+    else printf "  alias %s%s%s='%s'\n  %s%s× typed · saves ~%s keystrokes%s%s\n\n" "$GRN" "$name" "$R" "$e" "$D" "$c" "$saved" "$([ "$stem" = 1 ] && printf ' · add your argument: %s <arg>' "$name")" "$R"; fi
     [ $shown -ge "$TOPN" ] && break
   done < <(_alias_data)
   if [ $RAW -eq 0 ]; then
@@ -446,12 +450,14 @@ cmd_fix() {
 cmd_resume() {
   need_journal; local dir=${WORDS[0]:-$PWD} rows n ts rc c first last now branch dirty failed; dir=$(cd "$dir" 2>/dev/null && pwd || printf %s "$dir")
   if [ $ALL -eq 1 ]; then
+    [ $JSON -eq 1 ] && { load_journal | awk -F'\t' '{ if($1>l[$4])l[$4]=$1; n[$4]++; c[$4]=$5 } END{ for(d in l) printf "%d\t%d\t%s\t%s\n", l[d], n[d], d, c[d] }' | sort -t"$TAB" -k1,1 -rn | head -n "$TOPN" | json_rows '#last_active,#commands,directory,last_command'; return; }
     printf '\n  %sYOUR PROJECTS%s — most recently touched first\n\n' "$B" "$R"
     load_journal | awk -F'\t' '{ if($1>l[$4])l[$4]=$1; n[$4]++; c[$4]=$5 } END{ for(d in l) printf "%d\t%d\t%s\t%s\n", l[d], n[d], d, c[d] }' | sort -t"$TAB" -k1,1 -rn | head -n "$TOPN" |
     while IFS=$'\t' read -r ts n d c; do printf '  %s%-13s%s %s%-34s%s %s%4s cmds%s  last: %s\n' "$D" "$(rel "$ts")" "$R" "$B" "${d/#$HOME/~}" "$R" "$D" "$n" "$R" "${c:0:40}"; done
     echo; return; fi
   rows=$(load_journal | awk -F'\t' -v d="$dir" '$4==d{n++;T[n]=$1;RC[n]=$2;C[n]=$5} END{ if(!n)exit 1; s=n; while(s>1&&T[s]-T[s-1]<=1800)s--; for(i=s;i<=n;i++)print T[i]"\t"RC[i]"\t"C[i] }') ||
     { printf '\n  dejsh has no recorded commands in %s. Try %sdejsh resume --all%s\n\n' "${dir/#$HOME/~}" "$CYN" "$R"; exit 1; }
+  [ $JSON -eq 1 ] && { printf '%s\n' "$rows" | json_rows '#time,#exit_code,command'; return; }
   n=$(printf '%s\n' "$rows" | cnt); first=$(printf '%s\n' "$rows" | head -1 | cut -f1); last=$(printf '%s\n' "$rows" | tail -1 | cut -f1)
   printf '\n  %sWHERE YOU LEFT OFF%s in %s%s%s\n  %slast session %s · %s commands over %s%s\n\n' "$B" "$R" "$B" "${dir/#$HOME/~}" "$R" "$D" "$(rel "$last")" "$n" "$(dur $((last-first)))" "$R"
   printf '%s\n' "$rows" | grep -v "^[0-9]*${TAB}[0-9]*${TAB}\(ls\|pwd\|clear\)\( \|\$\)" | tail -n 8 | while IFS=$'\t' read -r ts rc c; do
@@ -466,10 +472,11 @@ cmd_resume() {
 
 # ---------- slow ----------
 cmd_slow() {
-  need_journal; local tot k n avg mx shown=0
+  need_journal; local tot k n mx rows
+  rows=$(load_journal | LC_ALL=C awk -F'\t' "$AWK_KEY"'{ k=ckey($5); if(k==""||$3<1) next; s[k]+=$3; n[k]++; if($3>m[k])m[k]=$3 } END{ for(k in s) printf "%d\t%s\t%d\t%d\n", s[k], k, n[k], m[k] }' | sort -t"$TAB" -k1,1 -rn | head -n "$TOPN")
+  [ $JSON -eq 1 ] && { printf '%s' "$rows" | json_rows '#total_seconds,command,#times,#worst_seconds'; return; }
   printf '\n  %sWHERE YOUR TERMINAL TIME GOES%s\n\n' "$B" "$R"
-  load_journal | LC_ALL=C awk -F'\t' "$AWK_KEY"'{ k=ckey($5); if(k==""||$3<1) next; s[k]+=$3; n[k]++; if($3>m[k])m[k]=$3 } END{ for(k in s) printf "%d\t%s\t%d\t%d\n", s[k], k, n[k], m[k] }' | sort -t"$TAB" -k1,1 -rn | head -n "$TOPN" |
-  while IFS=$'\t' read -r tot k n mx; do printf '  %s%8s%s  %-24s %s%4s× · avg %s · worst %s%s\n' "$B" "$(dur "$tot")" "$R" "$k" "$D" "$n" "$(dur $((tot/n)))" "$(dur "$mx")" "$R"; done
+  printf '%s\n' "$rows" | while IFS=$'\t' read -r tot k n mx; do [ -z "$k" ] && continue; printf '  %s%8s%s  %-24s %s%4s× · avg %s · worst %s%s\n' "$B" "$(dur "$tot")" "$R" "$k" "$D" "$n" "$(dur $((tot/n)))" "$(dur "$mx")" "$R"; done
   printf '\n  %sTip:%s anything averaging over a minute is a candidate for a background run or a notifier:  cmd; osascript -e '"'"'display notification "done"'"'"'\n\n' "$YEL" "$R"
 }
 
@@ -493,7 +500,7 @@ cmd_script() {
 
 # ---------- danger ----------
 cmd_danger() {
-  printf '\n  %sCLOSE CALLS%s — risky commands in your history\n\n' "$B" "$R"
+  [ $JSON -eq 0 ] && printf '\n  %sCLOSE CALLS%s — risky commands in your history\n\n' "$B" "$R"
   local out
   out=$(load_full | LC_ALL=C awk -F'\t' '
     BEGIN{ i=0
@@ -513,13 +520,14 @@ cmd_danger() {
       nr=i }
     { l=$0; sub(/^[^\t]*\t/,"",l); for(j=1;j<=nr;j++) if(l ~ r[j]){ n[j]++; ex[j]=l; ts[j]=$1; if(j==1) break; if(j==2&&n[1]&&0) break; break } }
     END{ for(j=1;j<=nr;j++) if(n[j]>0) printf "%d\t%s\t%s\t%s\n", n[j], t[j], a[j], substr(ex[j],1,70) }' | sort -t"$TAB" -k1,1 -rn)
+  [ $JSON -eq 1 ] && { printf '%s' "$out" | json_rows '#times,pattern,advice,last_example'; return; }
   if [ -z "$out" ]; then printf '  %s✓ no risky patterns found.%s\n\n' "$GRN" "$R"; return; fi
   printf '%s\n' "$out" | while IFS=$'\t' read -r n t a ex; do printf '  %s%s×%s  %s%s%s\n      %slast: %s%s\n      %s→ %s%s\n\n' "$RED" "$n" "$R" "$B" "$t" "$R" "$D" "$ex" "$R" "$GRN" "$a" "$R"; done
 }
 
 # ---------- coach ----------
 cmd_coach() {
-  printf '\n  %sHABIT COACH%s — small things that cost you time\n\n' "$B" "$R"
+  [ $JSON -eq 0 ] && printf '\n  %sHABIT COACH%s — small things that cost you time\n\n' "$B" "$R"
   local out
   out=$(load_full | LC_ALL=C awk -F'\t' '
     BEGIN{ i=0
@@ -540,6 +548,7 @@ cmd_coach() {
       nr=i }
     { l=$0; sub(/^[^\t]*\t/,"",l); for(j=1;j<=nr;j++) if(l ~ r[j]){ n[j]++; ex[j]=l; break } }
     END{ for(j=1;j<=nr;j++) if(n[j]>=m[j]) printf "%d\t%s\t%s\t%s\n", n[j], t[j], p[j], substr(ex[j],1,50) }' | sort -t"$TAB" -k1,1 -rn | head -n "$TOPN")
+  [ $JSON -eq 1 ] && { printf '%s' "$out" | json_rows '#times,habit,fix,example'; return; }
   if [ -z "$out" ]; then printf '  %s✓ no obvious bad habits. Efficient.%s\n\n' "$GRN" "$R"; return; fi
   printf '%s\n' "$out" | while IFS=$'\t' read -r n t p ex; do printf '  %s%s×%s %s%s%s  %s(e.g. %s)%s\n      %s→ %s%s\n\n' "$YEL" "$n" "$R" "$B" "$t" "$R" "$D" "$ex" "$R" "$GRN" "$p" "$R"; done
 }

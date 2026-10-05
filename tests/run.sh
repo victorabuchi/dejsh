@@ -145,6 +145,24 @@ t "bash recorder records commands" has "$jr" "echo hello"
 t "bash recorder captures exit code" has "$jr" "$(printf '\t1\t')"
 t "bash recorder skips secrets" hasnt "$jr" "API_TOKEN"
 
+section "smarter output (v0.7)"
+H2=$W/hist2
+awk 'BEGIN{ t=1760000000; for(i=1;i<=8;i++){ t+=3600; print ": " t ":0;git add -A"; t+=15; print ": " t ":0;git commit -m \"change " i " in module\""; t+=20; print ": " t ":0;git push origin main" } }' > "$H2"
+out=$("$D" alias -f "$H2" | strip)
+t "stem alias for varying args"  has "$out" "='git commit -m'"
+t "stem alias says to add arg"   has "$out" "add your argument"
+out=$("$D" alias -f "$H2" --json); t "alias json flags takes_argument" has "$out" '"takes_argument":1'
+out=$("$D" flows -f "$H2" | strip)
+t "flow found with varying messages" has "$out" "git add → git commit → git push"
+t "flow macro does not freeze one message" hasnt "$out" "change 3 in module"
+t "flow macro keeps stable steps" has "$out" "git add -A && git commit && git push origin main"
+for c in danger coach; do t "json valid: $c" sh -c "\"$D\" $c -f \"$D2\" --json | python3 -c 'import sys,json; json.load(sys.stdin)'"; done
+t "json valid: slow" sh -c "\"$D\" slow --json | python3 -c 'import sys,json; json.load(sys.stdin)'"
+t "json valid: resume --all" sh -c "\"$D\" resume --all --json | python3 -c 'import sys,json; json.load(sys.stdin)'"
+t "json valid: resume (session)" sh -c "cd \"$P1\" && \"$D\" resume --json | python3 -c 'import sys,json; json.load(sys.stdin)'"
+out=$("$D" danger -f "$D2" --json); t "danger json has pattern field" has "$out" '"pattern":"rm -rf'
+out=$("$D" slow --json); t "slow json has seconds" has "$out" '"total_seconds"'
+
 section "dig"
 out=$("$D" dig -f "$H" -l 3 | strip); t "dig renders layers" has "$out" "surface (today)"; t "dig names eras" has "$out" "The Version Age"
 
