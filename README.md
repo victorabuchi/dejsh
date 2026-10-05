@@ -92,7 +92,7 @@ $ dejsh fix
 
 It learns from your own failures. A failure followed by the commands you ran before it succeeded becomes a remembered fix. Nothing is hard-coded, so it works for your stack, your errors and your fixes.
 
-Add `--run` to apply the remembered fix: `dejsh fix --run` shows the command, asks `[y/N]`, runs it in the directory where the failure happened, and tells you what to re-run. It never runs anything without asking, and only offers single-command fixes.
+Add `--run` to apply the remembered fix. `dejsh fix --run` shows the command (or the numbered steps, if you usually fixed it with several), asks `[y/N]`, runs them in order in the directory where the failure happened (stopping at the first step that fails), and tells you what to re-run. It never runs anything without asking, and it **refuses to auto-apply a fix that contains a risky command** (`rm -rf`, `sudo`, `--force`, `reset --hard`, `DROP`, `dd`, `mkfs`, `chmod -R`...), so a destructive habit can never be replayed by accident.
 
 #### `dejsh resume`
 
@@ -138,6 +138,7 @@ These work immediately, from your existing history file.
 | `dejsh alias` | Retyping the same long commands | Ready-to-paste aliases ranked by keystrokes saved. Avoids names that clash with real commands or your existing aliases. Never suggests a command containing a secret. When the last argument varies (like `git commit -m "..."`), it suggests an alias for the stable part (`alias gcm='git commit -m'`) and marks it "add your argument". |
 | `dejsh typos` | Mistyping `git`, `docker`, `kubectl` | A fix-alias for each recurring typo (`gti` → `git`). |
 | `dejsh leaks` | A token or password pasted into a command once | Redacted findings for AWS keys, GitHub tokens, `sk-` API keys, Bearer tokens, `KEY=` exports, DB passwords, `user:pass@` URLs. `--scrub` deletes the lines (backup kept). |
+| `dejsh guard` | Secrets ending up in your history in the first place | Keeps any command containing a secret out of your history file, with a warning. See [below](#dejsh-guard). |
 | `dejsh flows` | Running the same 3 commands in a row | The repeated chain and a one-line alias for it. |
 | `dejsh danger` | Having run something scary and got lucky | Close calls (`rm -rf ~`, `git push --force`, `curl \| sh`, `DROP TABLE`, `kubectl delete`) with a safer alternative for each. |
 | `dejsh coach` | Small habits that waste time | `cd ../..` chains, `cat \| grep`, `ps \| grep`, repeated `clear`, long `cd` paths, each with the one-line fix. |
@@ -177,6 +178,28 @@ $ dejsh leaks
 ```
 
 Rotate anything it finds. `dejsh leaks --scrub` then removes those lines after you confirm and keeps a `.dejsh-backup` copy. Open a new shell afterwards, because a running shell may write its in-memory history back on exit.
+
+#### `dejsh guard`
+
+`dejsh leaks` finds secrets already in your history. `dejsh guard` stops new ones from getting there.
+
+```sh
+dejsh guard zsh --install      # or: bash, fish. Then open a new terminal.
+```
+
+From then on, if you run a command containing a secret (an API key, token, `password=...`, a `user:pass@` URL...), the command still runs, but it is **never written to your history file**, and you see:
+
+```console
+$ export STRIPE_KEY=sk_live_...
+dejsh: that command looks like it contains a secret (Stripe live key). It ran, but it will not be saved to your history file.
+```
+
+How it works and what it does not do:
+
+- **zsh** uses the `zshaddhistory` hook (the command stays in this session's up-arrow list, but is not written to disk). **bash** deletes the entry from the in-memory history right after it runs. **fish** uses `fish_should_add_to_history`.
+- A cheap pattern check runs first, so ordinary commands are never slowed down; only suspicious ones are checked properly. Nothing is sent anywhere, and the secret is passed to the checker over stdin, never as a process argument.
+- It acts the moment you press Enter. It cannot stop you typing a secret, and it does not stop the command itself from running, from appearing on screen or in your terminal's scrollback, or from reaching a recorder other than dejsh's.
+- It uses the same patterns as `dejsh leaks`, so it shares the same limits: it misses secrets with no recognisable shape.
 
 #### `dejsh wrapped`
 
@@ -318,8 +341,11 @@ It skips names that already exist as commands or aliases and never emits command
 
 ## Roadmap
 
-- [ ] `fix --run` for multi-step fixes
-- [ ] More secret patterns and a `leaks --watch` mode that warns as you type a secret into a command
+These are ideas, not promises:
+
+- [ ] `guard --confirm`: ask before *running* a command that contains a secret
+- [ ] Match remembered fixes by error text as well as by command
+- [ ] `resume` that also remembers which file you had open
 
 Ideas and votes welcome in the issues. See the [CHANGELOG](CHANGELOG.md) for what has shipped.
 

@@ -2,6 +2,12 @@
 
 All notable changes. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.9.0]
+- `fix --run` now handles multi-step fixes: shows the numbered steps, asks once, runs them in order and stops at the first failure.
+- `fix --run` refuses to auto-apply a fix that contains a risky command (`rm -rf`, `sudo`, `--force`, `reset --hard`, `DROP`, `dd`, `mkfs`, `chmod -R`).
+- New `dejsh guard [zsh|bash|fish] [--install]`: commands containing a secret still run but are never written to your history file. Tested against real shell histories in CI, with a no-guard control that proves the secret *would* otherwise be saved.
+- Completions know about `guard`.
+
 ## [0.8.0]
 - Tab completion for zsh, bash and fish: `dejsh completion <shell> [--install]`. Completes commands, flags, and arguments (shells, time windows, files).
 - Homebrew installs the completions automatically.

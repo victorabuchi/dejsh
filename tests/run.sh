@@ -45,7 +45,10 @@ def pump(t, quiet=None):
         elif quiet and time.time() - last >= quiet:
             return
 pump(8, quiet=1.5)
-for cmd in [":", "echo hello", "false", "export API_TOKEN=abc123", "exit"]:
+cmds = [":", "echo hello", "false", "export API_TOKEN=abc123"]
+if os.environ.get("PTY_SECRET"): cmds.append("export SOME_PAT=" + os.environ["PTY_SECRET"])
+cmds += ["echo after", "exit"]
+for cmd in cmds:
     os.write(fd, (cmd + "\r").encode()); pump(2.0, quiet=0.8)
 end = time.time() + 5
 while time.time() < end:
@@ -59,6 +62,27 @@ else:
     except ProcessLookupError: pass
 PY
 }
+# Run a command on a real pty and answer any "[y/N]" prompt with y. Prints the terminal output.
+pty_run() { python3 - "$@" <<'PY'
+import os, pty, sys, time, select
+argv = sys.argv[1:]
+pid, fd = pty.fork()
+if pid == 0: os.execvpe(argv[0], argv, os.environ)
+out = b""; sent = False; end = time.time() + 20
+while time.time() < end:
+    r, _, _ = select.select([fd], [], [], 0.2)
+    if r:
+        try: d = os.read(fd, 4096)
+        except OSError: break
+        if not d: break
+        out += d
+        if b"[y/N]" in out and not sent: time.sleep(0.3); os.write(fd, b"y\r"); sent = True
+sys.stdout.write(out.decode(errors="replace"))
+try: os.waitpid(pid, 0)
+except ChildProcessError: pass
+PY
+}
+
 section() { printf '\n%s\n' "$1"; }
 
 # ---------- fixtures ----------
@@ -266,6 +290,59 @@ if command -v fish >/dev/null 2>&1; then
   t "fish completion loads without error" fish -c "source $W/c.fish"
   t "fish completes 'le' to leaks" has "$(fish -c "source $W/c.fish; complete -C 'dejsh le'")" "leaks"
   t "fish completes fix --run" has "$(fish -c "source $W/c.fish; complete -C 'dejsh fix --'")" "run"
+fi
+
+section "multi-step fix --run and the guard (v0.9)"
+FX=$(mktemp -d); mkdir -p "$FX/build"; touch "$FX/build/keep"
+mkj() { awk -v now="$NOW" -v d="$FX" -v a="$1" -v b="$2" 'function r(rc,c){printf "%d\t%d\t1\t%s\t%s\n", t, rc, d, c; t+=10} BEGIN{ t=now-9000; for(i=0;i<3;i++){ r(1,"npm start"); r(0,a); if(b!="") r(0,b); r(0,"npm start") } r(1,"npm start") }' > "$3"; }
+mkj "touch a.txt" "touch b.txt" "$W/j4.tsv"
+out=$(DEJSH_JOURNAL=$W/j4.tsv pty_run "$D" fix --run | strip)
+t "multi-step fix lists the steps"   has "$out" "Run these 2 commands"
+t "multi-step fix ran step 1"        test -f "$FX/a.txt"
+t "multi-step fix ran step 2"        test -f "$FX/b.txt"
+mkj "rm -rf build" "" "$W/j5.tsv"
+out=$(DEJSH_JOURNAL=$W/j5.tsv pty_run "$D" fix --run | strip)
+t "risky fix is refused"             has "$out" "risky command"
+t "risky fix did not run"            test -f "$FX/build/keep"
+mkj "cp /nonexistent_zz /tmp/zz_out" "touch c.txt" "$W/j6.tsv"
+out=$(DEJSH_JOURNAL=$W/j6.tsv pty_run "$D" fix --run | strip)
+t "failing step stops the chain"     has "$out" "failed part-way"
+t "later step did not run"           test ! -f "$FX/c.txt"
+t "guard-check flags a secret"       test "$(printf 'export X=%s\n' "$STRIPE" | "$D" guard-check)" = "Stripe live key"
+t "guard-check clears normal input"  sh -c "echo 'ls -la' | \"$D\" guard-check; [ \$? -ne 0 ]"
+t "guard zsh snippet"  has "$("$D" guard zsh)"  "zshaddhistory"
+t "guard bash snippet" has "$("$D" guard bash)" "history -d"
+t "guard fish snippet" has "$("$D" guard fish)" "fish_should_add_to_history"
+DIR_D=$(dirname "$D")
+# negative control: the same session WITHOUT the guard must save the secret (proves the guard tests can fail)
+if command -v zsh >/dev/null 2>&1; then
+  CZ=$(mktemp -d); printf 'HISTFILE=%s/.zhist\nHISTSIZE=100\nSAVEHIST=100\n' "$CZ" > "$CZ/.zshrc"
+  PTY_SECRET="$STRIPE" pty_session "$CZ" "$CZ/.config" zsh -i >/dev/null 2>&1
+  t "control (zsh, no guard): secret IS saved" has "$(cat "$CZ/.zhist" 2>/dev/null)" "$STRIPE"
+fi
+CB=$(mktemp -d); printf 'HISTFILE=%s/.bhist\nHISTSIZE=100\nHISTFILESIZE=100\n' "$CB" > "$CB/.bashrc"
+PTY_SECRET="$STRIPE" pty_session "$CB" "$CB/.config" bash --rcfile "$CB/.bashrc" -i >/dev/null 2>&1
+t "control (bash, no guard): secret IS saved" has "$(cat "$CB/.bhist" 2>/dev/null)" "$STRIPE"
+if command -v zsh >/dev/null 2>&1; then
+  GZ=$(mktemp -d); { printf 'HISTFILE=%s/.zhist\nHISTSIZE=100\nSAVEHIST=100\nexport PATH="%s:$PATH"\n' "$GZ" "$DIR_D"; "$D" guard zsh; } > "$GZ/.zshrc"
+  PTY_SECRET="$STRIPE" pty_session "$GZ" "$GZ/.config" zsh -i >/dev/null 2>&1
+  hz=$(cat "$GZ/.zhist" 2>/dev/null)
+  t "zsh guard keeps normal commands in history" has "$hz" "echo hello"
+  t "zsh guard keeps later commands too"        has "$hz" "echo after"
+  t "zsh guard kept the secret out of history"  hasnt "$hz" "$STRIPE"
+fi
+GB=$(mktemp -d); { printf 'HISTFILE=%s/.bhist\nHISTSIZE=100\nHISTFILESIZE=100\nexport PATH="%s:$PATH"\n' "$GB" "$DIR_D"; "$D" guard bash; } > "$GB/.bashrc"
+PTY_SECRET="$STRIPE" pty_session "$GB" "$GB/.config" bash --rcfile "$GB/.bashrc" -i >/dev/null 2>&1
+hb=$(cat "$GB/.bhist" 2>/dev/null)
+t "bash guard keeps normal commands in history" has "$hb" "echo hello"
+t "bash guard keeps later commands too"        has "$hb" "echo after"
+t "bash guard kept the secret out of history"  hasnt "$hb" "$STRIPE"
+if command -v fish >/dev/null 2>&1; then
+  GF=$(mktemp -d); mkdir -p "$GF/.config/fish"; { printf 'set -gx PATH "%s" $PATH\n' "$DIR_D"; "$D" guard fish; } > "$GF/.config/fish/config.fish"
+  PTY_SECRET="$STRIPE" pty_session "$GF" "$GF/.config" fish -i >/dev/null 2>&1
+  hf=$(cat "$GF/.local/share/fish/fish_history" 2>/dev/null)
+  t "fish guard keeps normal commands in history" has "$hf" "echo hello"
+  t "fish guard kept the secret out of history"   hasnt "$hf" "$STRIPE"
 fi
 
 section "dig"
