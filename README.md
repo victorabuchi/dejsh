@@ -1,12 +1,45 @@
+<div align="center">
+
 # strata
 
-**Your shell has a memory problem. strata gives it a memory, then uses it to fix things.**
+### Give your shell a memory.
 
-You've typed `git push origin main` hundreds of times. You've typo'd `git` as `gti` every week for a year. Somewhere in your history there may be an API key you pasted once and forgot. strata reads the history file you already have, finds these problems, and hands you the fix.
+Learns how you fix errors, shows where you left off, turns what worked into scripts,<br>
+and audits your history for wasted keystrokes, risky commands and leaked secrets.
 
-Plain history can't tell you where a command ran, how long it took, or whether it failed. strata can record that locally (opt-in), and builds on it: it learns how *you* fix errors, shows where you left off in a project, and writes scripts from what you just did.
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+![Shell](https://img.shields.io/badge/shell-bash%203.2%2B-4EAA25?logo=gnubash&logoColor=white)
+![Works with](https://img.shields.io/badge/works%20with-zsh%20%7C%20bash-blue)
+![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
+![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)
+![Network](https://img.shields.io/badge/network-never-informational)
 
-One bash script. No dependencies, no network, nothing written unless you ask. Works with zsh and bash on macOS and Linux.
+[Quick start](#quick-start) · [Features](#features) · [Install](#install) · [Privacy](#privacy) · [FAQ](#faq)
+
+</div>
+
+---
+
+## Why strata
+
+Your shell history is a record of everything you do, and it's nearly useless. It can't tell you **where** a command ran, **whether it failed**, or **how long it took**. So every day you re-solve errors you've already solved, retype commands you've typed a thousand times, and lose your place when you return to a project.
+
+strata fixes that in two layers:
+
+| Layer | What it is | Needs install? |
+|---|---|---|
+| **Audit** | Reads the history file you already have. Finds aliases worth making, recurring typos, secrets sitting in plaintext, risky commands, repeated workflows, bad habits. | No. Run it now. |
+| **Memory** | An opt-in recorder adds exit code, duration and directory to each command. On top of that: personal error-fix memory, "where did I leave off", scripts from what just worked. | One command: `strata hook --install` |
+
+It is a single bash script. No dependencies, no network access, and it writes nothing unless you ask.
+
+## Quick start
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/victorabuchi/strata/main/install.sh | bash
+strata                       # checkup: what's fixable on your machine
+strata hook --install        # optional: turn on the memory layer, then open a new terminal
+```
 
 ```console
 $ strata
@@ -17,104 +50,28 @@ $ strata
   ✎  TYPOS    1 recurring typos                                           → strata typos
   🔑 SECRETS  4 possible secret(s) in plaintext!                          → strata leaks
   ⛓  FLOWS    13 workflows you repeat could be one command                → strata flows
+  ☢  DANGER   2 risky command patterns in your history                    → strata danger
+  🧭 COACH    1 habits costing you time                                   → strata coach
+  🎙 MEMORY   not recording: unlock fix / resume / slow / safe scripts    → strata hook --install
   🔍 RECALL   find any past command by keywords                           → strata find <words>
   🪨 DIG      your history as rock layers                                 → strata dig
 ```
 
-## The problems it solves
+## Features
 
-| You have this problem | Run | What you get |
-|---|---|---|
-| You retype the same long commands all day | `strata alias` | Ready-to-paste aliases, ranked by keystrokes saved. Skips names that clash with real commands or your existing aliases. |
-| You keep mistyping `git`, `docker`, `kubectl` | `strata typos` | A fix-alias for each recurring typo (`gti` → `git`). |
-| You pasted a token or password into a command once | `strata leaks` | Finds AWS keys, GitHub tokens, `sk-` API keys, Bearer tokens, `KEY=…` exports, DB passwords, `user:pass@` URLs. Shown redacted. `--scrub` deletes the lines (backup kept). |
-| You run the same 3 commands in a row every time | `strata flows` | The repeated chain and a one-line alias that runs it. |
-| "What was that docker command I ran last week?" | `strata find docker prune` | Matching commands, most recent first, with date and count. |
-| You're curious about your terminal life | `strata dig` | Your history as geological layers, with named eras and fossils. |
+### Memory layer
 
-### `strata alias`
+Run `strata hook --install` once. The recorder appends one line per command to `~/.strata/journal.tsv`. These commands use it:
 
-```console
-$ strata alias -n 3
+| Command | Solves |
+|---|---|
+| [`strata fix`](#strata-fix) | "That just failed. I know I've fixed this before." |
+| `strata fixes` | "How do I usually fix things?" Your personal troubleshooting memory, including flaky commands that only needed a re-run. |
+| [`strata resume`](#strata-resume) | "Where did I leave off in this project?" `--all` lists every project by recency. |
+| [`strata script`](#strata-script) | "I need to repeat what I just did." |
+| `strata slow` | "Where does my terminal time actually go?" |
 
-  alias gpom='git push origin main'
-  120× typed · saves ~1920 keystrokes
-
-  alias dcudb='docker compose up -d --build'
-  40× typed · saves ~920 keystrokes
-
-  alias cdmyawes='cd ~/projects/my-awesome-app'
-  40× typed · saves ~800 keystrokes
-
-  Add them:  strata alias --raw >> ~/.zshrc && source ~/.zshrc
-```
-
-Commands containing anything that looks like a secret are never suggested, so strata won't copy a token into your `.zshrc`.
-
-### `strata leaks`
-
-```console
-$ strata leaks
-
-  line 623  Secret assignment  export AWS_SECRET_ACCESS_KEY=<wJa...40>
-  line 624  GitHub token       git clone https://<ghp...40>@github.com/x/y.git
-  line 626  Database password  mysql -u root -p<hun...13> mydb
-
-  3 possible secret(s). Secrets are shown redacted; strata never prints them in full.
-  Rotate these credentials — deleting history does not un-leak anything already synced or backed up.
-```
-
-Rotate any credential it finds. `strata leaks --scrub` then removes those lines from the history file after you confirm, and keeps a `.strata-backup` copy. Open a new shell afterwards, because a running shell may write its in-memory history back on exit.
-
-### `strata flows`
-
-```console
-$ strata flows -n 2
-
-  120×  git add → git commit → git push
-      alias flow1='git add -A && git commit && git push origin main'
-
-  40×  git status → git log → git diff
-      alias flow2='git status && git log && git diff'
-```
-
-Only chains that ran within 15 minutes of each other count (when your history has timestamps). Rename the alias and edit the arguments to taste.
-
-### `strata find`
-
-```console
-$ strata find kube prod
-
-  Nov 18   14×  kubectl get pods -n production
-```
-
-All words must match, in any order. `strata find --raw docker prune` prints just the most recent match, so you can use it in scripts.
-
-### `strata dig`
-
-```
-  ▓▓▓▓▓▓▓▓ ☠ export ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  The Version Age
-  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  Oct 2025 → Nov 2025 · 156 cmds
-  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  git 74%, cd, docker
-```
-
-Your history sliced into layers (oldest at the bedrock), each named for its dominant command (`git` → *The Version Age*, `docker` → *The Container Era*), with commands used heavily in one layer only embedded as `☠` fossils. `-l 12` sets the layer count and `-w 90` the width.
-
-## The memory layer (opt-in recorder)
-
-```sh
-strata hook --install      # adds a small hook to ~/.zshrc or ~/.bashrc, then open a new terminal
-```
-
-The hook appends one line per command (time, exit code, duration, directory, command) to `~/.strata/journal.tsv`, mode 600, local only. Commands containing `token`, `secret`, `password`, `key` words, or starting with a space are never recorded. With it on:
-
-| You have this problem | Run | What you get |
-|---|---|---|
-| A command just failed and you know you've fixed this before | `strata fix` | The last failure, and what you ran last time it failed that way ("`npm start` failed → you ran `npm install`, worked 5 of 5 times"). |
-| You can't remember how you usually fix things | `strata fixes` | Your personal troubleshooting memory: each recurring failure and the fix that worked. It also spots flaky commands (fixed by just re-running). |
-| You come back to a project after a few days | `strata resume` | Your last session there: the commands, the step you stopped on (and if it failed), the git branch and uncommitted changes. `--all` lists every project by recency. |
-| "What did I just do that worked? I need to repeat it." | `strata script -n 8` | The last 8 *successful* commands as a runnable `set -euo pipefail` script, starting in the right directory. Secret-looking lines are skipped. `--since 30m` limits it by time. |
-| Your builds feel slow but you don't know why | `strata slow` | Time sinks ranked by total time, with average and worst case. |
+#### `strata fix`
 
 ```console
 $ strata fix
@@ -125,6 +82,10 @@ $ strata fix
   Last time `npm start` failed, you ran:
     npm install   (worked 5 of 5 times)
 ```
+
+It learns from your own failures. A failure followed by the commands you ran before it succeeded becomes a remembered fix. Nothing is hard-coded, so it works for your stack, your errors and your fixes.
+
+#### `strata resume`
 
 ```console
 $ strata resume
@@ -141,14 +102,105 @@ $ strata resume
   git: on main, 1 uncommitted change(s)
 ```
 
-## Works from history alone
+#### `strata script`
 
-| You have this problem | Run | What you get |
+```console
+$ strata script -n 5 > setup.sh
+
+#!/usr/bin/env bash
+# generated by strata from 5 command(s)
+set -euo pipefail
+
+cd "/Users/you/projects/strata"
+git status
+shellcheck strata
+git add -A
+git commit -m docs
+```
+
+Only commands that succeeded are included. Lines that look like they contain secrets are replaced with a comment. `--since 30m` limits by time and `-n N` by count. Without the recorder it falls back to plain history and says so.
+
+### Audit layer
+
+These work immediately, from your existing history file.
+
+| Command | Solves | Output |
 |---|---|---|
-| You've run something scary and got lucky | `strata danger` | Close calls (`rm -rf ~`, `git push --force`, `curl \| sh`, `DROP TABLE`, `kubectl delete`...) with the safer alternative for each. |
-| Small habits quietly waste your day | `strata coach` | `cd ../..` chains, `cat \| grep`, `ps \| grep`, repeated `clear`, long `cd` paths... each with the one-line fix. |
-| You want to share your terminal year | `strata wrapped` | A shareable card: commands, top tools, your personality ("The Git Gardener"), your hourly rhythm, longest streak. |
-| A new teammate asks "what tools do you use?" | `strata export > me.tsv` then `strata compare theirs.tsv` | A privacy-safe profile (tool names and counts only, no arguments or paths), and a diff: what they use that you've never touched, and the reverse. |
+| `strata alias` | Retyping the same long commands | Ready-to-paste aliases ranked by keystrokes saved. Avoids names that clash with real commands or your existing aliases. Never suggests a command containing a secret. |
+| `strata typos` | Mistyping `git`, `docker`, `kubectl` | A fix-alias for each recurring typo (`gti` → `git`). |
+| `strata leaks` | A token or password pasted into a command once | Redacted findings for AWS keys, GitHub tokens, `sk-` API keys, Bearer tokens, `KEY=` exports, DB passwords, `user:pass@` URLs. `--scrub` deletes the lines (backup kept). |
+| `strata flows` | Running the same 3 commands in a row | The repeated chain and a one-line alias for it. |
+| `strata danger` | Having run something scary and got lucky | Close calls (`rm -rf ~`, `git push --force`, `curl \| sh`, `DROP TABLE`, `kubectl delete`) with a safer alternative for each. |
+| `strata coach` | Small habits that waste time | `cd ../..` chains, `cat \| grep`, `ps \| grep`, repeated `clear`, long `cd` paths, each with the one-line fix. |
+| `strata find <words>` | "What was that command?" | Matches, most recent first, with date and count. `--raw` prints only the top match. |
+| `strata wrapped` | Wanting to share your terminal year | A card: totals, top tools, personality, hourly rhythm, longest streak. |
+| `strata export` / `strata compare FILE` | "What tools does my teammate use that I don't?" | A profile of tool names and counts only (no arguments, no paths), and a two-way diff. |
+| `strata dig` | Curiosity | Your history as geological layers, with named eras and fossils. |
+
+#### `strata alias`
+
+```console
+$ strata alias -n 3
+
+  alias gpom='git push origin main'
+  120× typed · saves ~1920 keystrokes
+
+  alias dcudb='docker compose up -d --build'
+  40× typed · saves ~920 keystrokes
+
+  alias cdmyawes='cd ~/projects/my-awesome-app'
+  40× typed · saves ~800 keystrokes
+
+  Add them:  strata alias --raw >> ~/.zshrc && source ~/.zshrc
+```
+
+#### `strata leaks`
+
+```console
+$ strata leaks
+
+  line 623  Secret assignment  export AWS_SECRET_ACCESS_KEY=<wJa...40>
+  line 624  GitHub token       git clone https://<ghp...40>@github.com/x/y.git
+  line 626  Database password  mysql -u root -p<hun...13> mydb
+
+  3 possible secret(s). Secrets are shown redacted; strata never prints them in full.
+  Rotate these credentials — deleting history does not un-leak anything already synced or backed up.
+```
+
+Rotate anything it finds. `strata leaks --scrub` then removes those lines after you confirm and keeps a `.strata-backup` copy. Open a new shell afterwards, because a running shell may write its in-memory history back on exit.
+
+#### `strata wrapped`
+
+```console
+  ╭──────────────────────────────────────────────────╮
+  │  TERMINAL WRAPPED  2026
+  │  4210 commands · 212 distinct tools
+  │  you are: The Git Gardener (night shift)
+  │
+  │  git       ███████████████████████ 1203
+  │  docker    ██████ 310
+  │  npm       █████ 264
+  │
+  │  rhythm  00h ▃▂▁▁▁▁▁▂▄▆▇█▇▆▆▇▆▅▄▃▄▅▄▃ 23h
+  │  peak hour: 11:00 · active 212 days · longest streak 41 days
+  ╰──────────────────────────────────────────────────╯
+```
+
+#### `strata compare`
+
+```console
+$ strata export > me.tsv                 # share this: tool names and counts only
+$ strata compare senior-dev.tsv
+
+  THEY USE, YOU NEVER HAVE
+
+  terraform plan         40× for them
+  fzf                    22× for them
+  rg                     18× for them
+
+  YOU USE, THEY NEVER DO
+  ...
+```
 
 ## Install
 
@@ -162,49 +214,89 @@ curl -fsSL https://raw.githubusercontent.com/victorabuchi/strata/main/install.sh
 
 ```sh
 git clone https://github.com/victorabuchi/strata.git
-cd strata && ./install.sh        # or: PREFIX_BIN=/usr/local/bin ./install.sh
+cd strata && ./install.sh          # or: PREFIX_BIN=/usr/local/bin ./install.sh
 ```
 
-If `~/.local/bin` isn't on your `PATH`, add `export PATH="$HOME/.local/bin:$PATH"` to `~/.zshrc` or `~/.bashrc`.
+**No install:** `./strata` runs in place.
 
-## Options
+If `~/.local/bin` isn't on your `PATH`, add `export PATH="$HOME/.local/bin:$PATH"` to your `~/.zshrc` or `~/.bashrc`.
+
+**Requirements:** bash 3.2+ (the macOS default works), plus `awk`, `sort`, `cksum` and `date` (BSD and GNU variants both work). A 256-colour UTF-8 terminal is recommended.
+
+## Usage
 
 ```
 strata [command] [options]
 
-  -f FILE     history file (default: $HISTFILE, ~/.zsh_history, ~/.bash_history)
-  -n N        rows to show (default 10)
-  --raw       machine output: alias lines only, or the top match for find
-  --scrub     with `leaks`: delete flagged lines (asks first, keeps a backup)
-  -l N -w N   dig: number of layers, width
+  -f FILE      history file (default: $HISTFILE, ~/.zsh_history, ~/.bash_history)
+  -n N         rows to show (default 10)
+  --raw        machine output: alias lines only, or the top match for `find`
+  --scrub      with `leaks`: delete flagged lines (asks first, keeps a backup)
+  --since 30m  with `script`: only commands from the last 30m / 2h / 1d
+  --all        with `resume`: every project
+  -l N -w N    with `dig`: number of layers, width
 ```
 
-## Get timestamps (optional, makes `flows` and dates better)
+Run `strata help` for the full command list.
+
+## Timestamps (optional, improves dates and flows)
 
 - **zsh:** `setopt EXTENDED_HISTORY` in `~/.zshrc`
 - **bash:** `export HISTTIMEFORMAT="%F %T "` in `~/.bashrc`
 
-Without timestamps everything still works; flows just can't filter by time gap, and `dig` shows `?` for dates. They only apply to commands you run after enabling them.
+Without timestamps everything still works. `flows` just can't filter by time gap, and `dig` and `wrapped` have less to show. The recorder makes this unnecessary for anything it records.
 
-## Honest limits
+## How it works
 
-- strata sees what your history file recorded. Shells that don't save history, or a very short history, give thin results.
-- Plain history has no exit codes or working directories. `fix`, `fixes`, `resume`, `slow` and success-only `script` need the recorder, and only know about commands run after you install it.
-- `leaks` is pattern-based. It will miss secrets with no recognisable shape and may flag harmless values. Treat it as a smoke detector, not an audit.
-- Typo detection compares command names to your frequently used ones; it skips anything that exists on your `PATH`.
+1. **Load.** One pass normalises your history (zsh extended format, bash timestamp comments) into `time, command` rows. strata's own invocations are excluded.
+2. **Analyse.** Each command is a small `awk` program over those rows. Command keys treat `git push` and `docker compose` as distinct tools, and skip `sudo`, `time` and `VAR=x` prefixes.
+3. **Remember (optional).** The recorder is a few lines of `preexec`/`precmd` (zsh) or `DEBUG` trap/`PROMPT_COMMAND` (bash). It appends `epoch, exit code, duration, cwd, command` to a plain TSV file you can read, grep or delete.
+4. **Render.** Output is plain text with ANSI colour. Every analysis also has a machine-friendly form (`--raw`, `export`).
 
 ## Privacy
 
-Everything runs locally. strata reads your history and prints to your terminal. It makes no network requests. It only writes: the history file during `leaks --scrub` (plus a backup), and `~/.strata/journal.tsv` if you install the recorder. `strata export` shares tool names and counts only, never arguments.
+- **Local only.** strata makes no network requests.
+- **Writes are limited to:** the history file during `leaks --scrub` (with a backup), and `~/.strata/journal.tsv` if you install the recorder (mode 600).
+- **The recorder skips** commands containing `token`, `secret`, `password`, `apikey`, `bearer`, `akia`, `private key`, and any command starting with a space.
+- **Secrets are never printed in full.** `leaks` shows a redacted preview.
+- **Sharing is opt-in and minimal.** `strata export` emits tool names and counts only, never arguments or paths.
+- **Remove the recorder** by deleting the block between the `strata recorder` markers in your rc file, and `~/.strata/` if you want the data gone.
 
-## Requirements
+## FAQ
 
-bash 3.2+ (macOS default is fine), plus `awk`, `sort`, `cksum`, `date` (BSD and GNU variants both work). A 256-colour UTF-8 terminal for `dig`.
+**Does the recorder slow down my shell?**
+It adds one `printf` append per command. The zsh version forks nothing. The bash version makes one `date` call per prompt, because bash 3.2 has no built-in epoch clock.
+
+**Why doesn't `strata fix` know my fix yet?**
+It learns from failures you've already had since installing the recorder. It needs a command to fail and later succeed within 15 minutes, and the pattern to repeat at least twice.
+
+**Will `leaks` catch everything?**
+No. It is pattern-based and misses secrets with no recognisable shape. Treat it as a smoke detector, not an audit.
+
+**Does it work with fish?**
+Not yet. See the roadmap.
+
+**Is it safe to run `strata alias --raw >> ~/.zshrc`?**
+It skips names that already exist as commands or aliases and never emits commands that look like they contain secrets. Skim the output first if you like. It's plain alias lines.
+
+## Limits
+
+- Plain history has no exit codes or directories. `fix`, `fixes`, `resume`, `slow` and success-only `script` only know about commands run after you install the recorder.
+- Typo detection compares against tools you use often, and skips anything that exists on your `PATH`.
+- `wrapped` computes hours using your current timezone offset, so it can be off by an hour across daylight-saving changes.
+
+## Roadmap
+
+- [ ] fish shell support
+- [ ] `strata fix --run` to apply the remembered fix after confirmation
+- [ ] `--json` output for every command
+- [ ] more secret patterns (cloud providers, payment keys)
+- [ ] a Homebrew formula
 
 ## Contributing
 
-Ideas: more secret patterns, more era names, `--json` output, fish shell support. Issues and PRs welcome.
+Issues and pull requests are welcome. The whole tool is one script, and each command is a small, independent function, so it's easy to add one. Please test on macOS's default bash 3.2 (`/bin/bash`), since that's the most restrictive target.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) © Victor Abuchi

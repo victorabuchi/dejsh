@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # strata — your shell history, audited: aliases, typos, leaked secrets, repeated workflows, recall.
-VERSION=0.2.0
+VERSION=0.3.0
 LAYERS=8; WIDTH=64; TOPN=10; RAW=0; SCRUB=0; ALL=0; INSTALL=0; SINCE=0; HFILE=${STRATA_HIST:-}
 B=$'\033[1m'; D=$'\033[2m'; R=$'\033[0m'; GRN=$'\033[32m'; YEL=$'\033[33m'; RED=$'\033[31m'; CYN=$'\033[36m'
 
