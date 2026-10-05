@@ -15,6 +15,12 @@ jobs:
       - name: Install zsh (Linux)
         if: startsWith(matrix.os, 'ubuntu')
         run: sudo apt-get update -qq && sudo apt-get install -y -qq zsh
+      - name: Install fish (Linux)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: sudo apt-get install -y -qq fish
+      - name: Install fish (macOS)
+        if: startsWith(matrix.os, 'macos')
+        run: brew install fish
       - name: Syntax check
         run: bash -n dejsh && bash -n install.sh && bash -n tests/run.sh
       - name: Run tests

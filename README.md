@@ -238,6 +238,18 @@ If `~/.local/bin` isn't on your `PATH`, add `export PATH="$HOME/.local/bin:$PATH
 
 **Requirements:** bash 3.2+ (the macOS default works), plus `awk`, `sort`, `cksum` and `date` (BSD and GNU variants both work). A 256-colour UTF-8 terminal is recommended.
 
+## Tab completion
+
+dejsh completes its commands, flags and arguments in zsh, bash and fish.
+
+```sh
+dejsh completion zsh --install     # or: bash, fish. Then open a new terminal.
+dejsh <TAB>                        # fix  fixes  resume  slow  script ...
+dejsh leaks --<TAB>                # --scrub  --json  ...
+```
+
+`--install` adds one small block to your `~/.zshrc`, `~/.bashrc` or `~/.config/fish/config.fish` (and won't add it twice). To load it yourself instead: `eval "$(dejsh completion zsh)"` (bash: the same with `bash`; fish: `dejsh completion fish | source`). **Homebrew installs the completions for you.**
+
 ## Usage
 
 ```
@@ -307,8 +319,7 @@ It skips names that already exist as commands or aliases and never emits command
 ## Roadmap
 
 - [ ] `fix --run` for multi-step fixes
-- [ ] Shell completions (zsh, bash, fish)
-- [ ] A short recorded demo GIF
+- [ ] More secret patterns and a `leaks --watch` mode that warns as you type a secret into a command
 
 Ideas and votes welcome in the issues. See the [CHANGELOG](CHANGELOG.md) for what has shipped.
 

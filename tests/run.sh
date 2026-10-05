@@ -170,6 +170,46 @@ t "json valid: resume (session)" sh -c "cd \"$P1\" && \"$D\" resume --json | pyt
 out=$("$D" danger -f "$D2" --json); t "danger json has pattern field" has "$out" '"pattern":"rm -rf'
 out=$("$D" slow --json); t "slow json has seconds" has "$out" '"total_seconds"'
 
+if command -v fish >/dev/null 2>&1; then
+  FF=$(mktemp -d); mkdir -p "$FF/.config/fish"; "$D" hook fish > "$FF/.config/fish/config.fish"
+  printf 'echo hello\nfalse\nexport API_TOKEN=abc123\nexit\n' | HOME=$FF XDG_CONFIG_HOME=$FF/.config fish -i >/dev/null 2>&1
+  jr=$(cat "$FF/.dejsh/journal.tsv" 2>/dev/null)
+  t "fish recorder records commands"    has "$jr" "echo hello"
+  t "fish recorder captures exit code"  has "$jr" "$(printf '\t1\t')"
+  t "fish recorder skips secrets"       hasnt "$jr" "API_TOKEN"
+fi
+
+section "shell completions (v0.8)"
+cb=$("$D" completion bash)
+t "bash completion defines function" has "$cb" "_dejsh()"
+comp() { COMP_WORDS=("$@"); COMP_CWORD=$(( ${#COMP_WORDS[@]} - 1 )); COMPREPLY=(); _dejsh; echo "${COMPREPLY[*]}"; }
+eval "$cb"
+t "bash: 'le' completes to leaks"          test "$(comp dejsh le)" = "leaks"
+t "bash: fix offers --run"                 test "$(comp dejsh fix --)" = "--run"
+t "bash: leaks offers --scrub"             test "$(comp dejsh leaks --s)" = "--scrub"
+t "bash: resume offers --all"              has "$(comp dejsh resume --)" "--all"
+t "bash: script --since offers windows"    has "$(comp dejsh script --since '')" "2h"
+t "bash: hook offers shells"               has "$(comp dejsh hook '')" "fish"
+t "bash: top level lists all commands"     has "$(comp dejsh '')" "completion"
+t "bash: -f completes filenames"           test -n "$(cd "$W" && comp dejsh alias -f hi)"
+t "zsh completion has #compdef"            has "$("$D" completion zsh)" "#compdef dejsh"
+t "fish completion has subcommands"        has "$("$D" completion fish)" "__fish_use_subcommand"
+t "completion rejects unknown shell"       sh -c "\"$D\" completion tcsh >/dev/null 2>&1; [ \$? -ne 0 ]"
+for sh in zsh bash fish; do
+  CH=$(mktemp -d); HOME=$CH "$D" completion $sh --install >/dev/null 2>&1; HOME=$CH "$D" completion $sh --install >/dev/null 2>&1
+  t "completion install idempotent ($sh)" test "$(grep -rh 'dejsh completion >>>' "$CH" | wc -l | tr -d ' ')" -eq 1
+done
+if command -v zsh >/dev/null 2>&1; then
+  printf 'autoload -Uz compinit\ncompinit -u -d "%s/zcd" 2>/dev/null\neval "$("%s" completion zsh)"\nprint -r -- "${_comps[dejsh]}"\n' "$W" "$D" > "$W/zt.zsh"
+  t "zsh completion registers with compinit" test "$(zsh -f "$W/zt.zsh" 2>/dev/null | tail -1)" = "_dejsh"
+fi
+if command -v fish >/dev/null 2>&1; then
+  printf '%s\n' "$("$D" completion fish)" > "$W/c.fish"
+  t "fish completion loads without error" fish -c "source $W/c.fish"
+  t "fish completes 'le' to leaks" has "$(fish -c "source $W/c.fish; complete -C 'dejsh le'")" "leaks"
+  t "fish completes fix --run" has "$(fish -c "source $W/c.fish; complete -C 'dejsh fix --'")" "run"
+fi
+
 section "dig"
 out=$("$D" dig -f "$H" -l 3 | strip); t "dig renders layers" has "$out" "surface (today)"; t "dig names eras" has "$out" "The Version Age"
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # dejsh — your shell history, audited: aliases, typos, leaked secrets, repeated workflows, recall.
-VERSION=0.7.1
+VERSION=0.8.0
 LAYERS=8; WIDTH=64; TOPN=10; RAW=0; SCRUB=0; JSON=0; RUN=0; ALL=0; INSTALL=0; SINCE=0; HFILE=${DEJSH_HIST:-}
 B=$'\033[1m'; D=$'\033[2m'; R=$'\033[0m'; GRN=$'\033[32m'; YEL=$'\033[33m'; RED=$'\033[31m'; CYN=$'\033[36m'
 
@@ -29,13 +29,17 @@ ${B}history only${R}:
   dejsh export            privacy-safe profile of the tools you use (no arguments, no paths)
   dejsh compare FILE      what a teammate's profile uses that you've never touched
 
+${B}setup${R}:
+  dejsh hook [--install]        install the recorder (zsh, bash, fish)
+  dejsh completion SHELL [--install]   tab completion for zsh, bash or fish
+
 options: -f FILE (history file)  -n N (rows, default 10)  --raw (for >> ~/.zshrc)
          --json (alias typos flows leaks fixes find export doctor)  --run (with fix: offer to re-apply)
 U
 }
 
 CMD=${1:-}
-case $CMD in dig|alias|typos|flows|leaks|find|doctor|hook|fixes|fix|resume|slow|script|danger|coach|wrapped|export|compare) shift;; help|-h|--help) usage; exit 0;; --version) echo "dejsh $VERSION"; exit 0;; *) CMD=doctor;; esac
+case $CMD in dig|alias|typos|flows|leaks|find|doctor|hook|fixes|fix|resume|slow|script|danger|coach|wrapped|export|compare|completion) shift;; help|-h|--help) usage; exit 0;; --version) echo "dejsh $VERSION"; exit 0;; *) CMD=doctor;; esac
 WORDS=()
 while [ $# -gt 0 ]; do case $1 in
   -l) LAYERS=$2; shift 2;; -w) WIDTH=$2; shift 2;; -f) HFILE=$2; shift 2;; -n) TOPN=$2; shift 2;;
@@ -44,7 +48,7 @@ while [ $# -gt 0 ]; do case $1 in
 case $CMD in dig|doctor|alias|typos|flows|leaks|danger|coach|wrapped|export) [ -n "${WORDS[0]:-}" ] && [ -f "${WORDS[0]}" ] && HFILE=${WORDS[0]};; esac
 H=
 for f in "$HFILE" "${HISTFILE:-}" "$HOME/.zsh_history" "$HOME/.bash_history" "$HOME/.local/share/fish/fish_history"; do [ -n "$f" ] && [ -r "$f" ] && { H=$f; break; }; done
-case $CMD in hook|fix|fixes|resume|slow) ;; script) [ -s "${DEJSH_JOURNAL:-$HOME/.dejsh/journal.tsv}" ] || [ -n "$H" ] || { echo "dejsh: no history file found"; exit 1; };;
+case $CMD in hook|fix|fixes|resume|slow|completion) ;; script) [ -s "${DEJSH_JOURNAL:-$HOME/.dejsh/journal.tsv}" ] || [ -n "$H" ] || { echo "dejsh: no history file found"; exit 1; };;
   *) [ -n "$H" ] || { echo "dejsh: no history file found (try -f FILE)"; exit 1; };; esac
 
 # ts<TAB>full command. Understands zsh EXTENDED_HISTORY and bash HISTTIMEFORMAT; skips dejsh's own invocations.
@@ -607,5 +611,97 @@ cmd_compare() {
   rm -f "$mine" "$theirs"
 }
 
+
+# ======================= v0.8: shell completions =======================
+comp_cmds() { cat <<'L'
+alias|commands you retype a lot: ready-made aliases
+typos|recurring typos: fix-aliases
+leaks|passwords and API keys sitting in plaintext in history
+flows|command sequences you repeat: one-command macros
+find|search past commands by keywords
+dig|your history as geological layers
+danger|close calls: rm -rf, force-push, curl-to-shell
+coach|habits costing you time
+wrapped|your terminal year as a shareable card
+export|privacy-safe profile of the tools you use
+compare|what a teammate profile uses that you never have
+fix|last command failed: what did you do about it before
+fixes|your personal troubleshooting memory
+resume|where did you leave off in this project
+slow|where your terminal time actually goes
+script|turn your last N successful commands into a script
+hook|print or install the recorder for zsh, bash or fish
+completion|print or install shell completions
+help|show help
+L
+}
+comp_flags() { case $1 in
+  alias|typos|find) echo "--raw --json -n -f";; flows|danger|coach) echo "--json -n -f";; leaks) echo "--scrub --json -n -f";;
+  dig) echo "-l -w -f";; fixes|slow) echo "--json -n";; fix) echo "--run";; resume) echo "--all --json -n";;
+  script) echo "--since -n -f";; wrapped) echo "-f";; export) echo "--json -f";; compare) echo "-n -f";;
+  hook|completion) echo "--install";; "") echo "--json -f --version --help";; esac; }
+flag_desc() { case $1 in --raw) echo "machine output (alias lines, or the top match)";; --json) echo "machine-readable JSON";; -n) echo "number of rows";; -f) echo "history file to read";;
+  --scrub) echo "delete flagged lines (asks first, keeps a backup)";; -l) echo "number of layers";; -w) echo "width in columns";; --run) echo "offer to apply the remembered fix (asks first)";;
+  --all) echo "every project";; --since) echo "only commands from the last 30m, 2h or 1d";; --install) echo "add to your shell config";; --version) echo "print version";; --help) echo "show help";; esac; }
+flag_arg() { case $1 in -n|-l|-w) echo number;; -f) echo file;; --since) echo window;; *) echo none;; esac; }
+
+comp_zsh() {
+  local n d c f spec k
+  printf '#compdef dejsh\n# dejsh completion (zsh). Load with:  eval "$(dejsh completion zsh)"\nif (( ! $+functions[compdef] )); then autoload -Uz compinit && compinit; fi\n_dejsh() {\n  local -a cmds\n  cmds=(\n'
+  comp_cmds | while IFS='|' read -r n d; do printf "    '%s:%s'\n" "$n" "$d"; done
+  printf '  )\n  local curcontext="$curcontext" state line\n  _arguments -C '"'"'1: :->cmd'"'"' '"'"'*:: :->args'"'"'\n  case $state in\n    cmd) _describe -t commands "dejsh command" cmds; compadd -- --version --help ;;\n    args)\n      case $words[1] in\n'
+  for c in $(comp_cmds | cut -d'|' -f1); do
+    spec=""
+    for f in $(comp_flags "$c"); do d=$(flag_desc "$f"); k=$(flag_arg "$f")
+      case $k in none) spec="$spec '$f[$d]'";; number) spec="$spec '$f[$d]:number: '";; file) spec="$spec '$f[$d]:file:_files'";; window) spec="$spec '$f[$d]:window:(30m 2h 1d)'";; esac; done
+    case $c in hook|completion) spec="$spec '1:shell:(zsh bash fish)'";; compare) spec="$spec '1:profile file:_files'";; esac
+    [ -n "$spec" ] && printf '        %s) _arguments%s ;;\n' "$c" "$spec"
+  done
+  printf '      esac ;;\n  esac\n}\ncompdef _dejsh dejsh\n'
+}
+
+comp_bash() {
+  local c
+  printf '# dejsh completion (bash). Load with:  eval "$(dejsh completion bash)"\n_dejsh() {\n  local cur=${COMP_WORDS[COMP_CWORD]} prev cmd=${COMP_WORDS[1]}\n  prev=${COMP_WORDS[COMP_CWORD-1]}; COMPREPLY=()\n'
+  printf '  case $prev in\n    -f) COMPREPLY=($(compgen -f -- "$cur")); return;;\n    -n|-l|-w) return;;\n    --since) COMPREPLY=($(compgen -W "30m 2h 1d" -- "$cur")); return;;\n  esac\n'
+  printf '  if [ "$COMP_CWORD" -eq 1 ]; then COMPREPLY=($(compgen -W "%s --version --help" -- "$cur")); return; fi\n  case $cmd in\n' "$(comp_cmds | cut -d'|' -f1 | tr '\n' ' ')"
+  for c in $(comp_cmds | cut -d'|' -f1); do
+    case $c in
+      hook|completion) printf '    %s) COMPREPLY=($(compgen -W "zsh bash fish --install" -- "$cur"));;\n' "$c";;
+      compare) printf '    %s) COMPREPLY=($(compgen -f -- "$cur") $(compgen -W "-n -f" -- "$cur"));;\n' "$c";;
+      *) [ -n "$(comp_flags "$c")" ] && printf '    %s) COMPREPLY=($(compgen -W "%s" -- "$cur"));;\n' "$c" "$(comp_flags "$c")";;
+    esac
+  done
+  printf '  esac\n}\ncomplete -F _dejsh dejsh\n'
+}
+
+comp_fish() {
+  local n d c f k
+  printf '# dejsh completion (fish). Load with:  dejsh completion fish | source\ncomplete -c dejsh -f\n'
+  comp_cmds | while IFS='|' read -r n d; do printf "complete -c dejsh -n __fish_use_subcommand -a %s -d '%s'\n" "$n" "$d"; done
+  printf "complete -c dejsh -n __fish_use_subcommand -l version -d 'print version'\ncomplete -c dejsh -n __fish_use_subcommand -l help -d 'show help'\n"
+  for c in $(comp_cmds | cut -d'|' -f1); do
+    for f in $(comp_flags "$c"); do d=$(flag_desc "$f"); k=$(flag_arg "$f")
+      case $f in --*) fl="-l ${f#--}";; *) fl="-s ${f#-}";; esac
+      case $k in none) printf "complete -c dejsh -n '__fish_seen_subcommand_from %s' %s -d '%s'\n" "$c" "$fl" "$d";;
+        number) printf "complete -c dejsh -n '__fish_seen_subcommand_from %s' %s -x -d '%s'\n" "$c" "$fl" "$d";;
+        file) printf "complete -c dejsh -n '__fish_seen_subcommand_from %s' %s -r -F -d '%s'\n" "$c" "$fl" "$d";;
+        window) printf "complete -c dejsh -n '__fish_seen_subcommand_from %s' %s -x -a '30m 2h 1d' -d '%s'\n" "$c" "$fl" "$d";; esac
+    done
+    case $c in hook|completion) printf "complete -c dejsh -n '__fish_seen_subcommand_from %s' -a 'zsh bash fish'\n" "$c";; compare) printf "complete -c dejsh -n '__fish_seen_subcommand_from compare' -F\n";; esac
+  done
+}
+
+cmd_completion() {
+  local sh=${WORDS[0]:-$(basename "${SHELL:-zsh}")} rc line
+  case $sh in zsh|bash|fish) ;; *) echo "usage: dejsh completion [zsh|bash|fish] [--install]"; exit 1;; esac
+  if [ $INSTALL -eq 0 ]; then comp_$sh; return; fi
+  case $sh in fish) rc=$HOME/.config/fish/config.fish; mkdir -p "$HOME/.config/fish"; line='dejsh completion fish | source';; *) rc=$HOME/.${sh}rc; line="eval \"\$(dejsh completion $sh)\"";; esac
+  if grep -qs 'dejsh completion' "$rc"; then printf '  completion already installed in %s\n' "$rc"; return; fi
+  command -v dejsh >/dev/null 2>&1 || printf '  %snote:%s `dejsh` is not on your PATH yet, so completion will not load in new shells until it is.\n' "$YEL" "$R"
+  printf '\n# >>> dejsh completion >>>\n%s\n# <<< dejsh completion <<<\n' "$line" >> "$rc"
+  printf '\n  %s✓ completion added to %s%s\n  Open a new terminal, then try:  dejsh <TAB>\n  Remove it any time by deleting the block between the "dejsh completion" markers.\n\n' "$GRN" "$rc" "$R"
+}
+
 case $CMD in dig) cmd_dig;; alias) cmd_alias;; typos) cmd_typos;; flows) cmd_flows;; leaks) cmd_leaks;; find) cmd_find;; doctor) cmd_doctor;;
-  hook) cmd_hook;; fixes) cmd_fixes;; fix) cmd_fix;; resume) cmd_resume;; slow) cmd_slow;; script) cmd_script;; danger) cmd_danger;; coach) cmd_coach;; wrapped) cmd_wrapped;; export) cmd_export;; compare) cmd_compare;; esac
+  completion) cmd_completion;; hook) cmd_hook;; fixes) cmd_fixes;; fix) cmd_fix;; resume) cmd_resume;; slow) cmd_slow;; script) cmd_script;; danger) cmd_danger;; coach) cmd_coach;; wrapped) cmd_wrapped;; export) cmd_export;; compare) cmd_compare;; esac
