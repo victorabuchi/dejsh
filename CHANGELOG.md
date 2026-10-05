@@ -7,6 +7,7 @@ All notable changes. Format based on [Keep a Changelog](https://keepachangelog.c
 - `fix --run` refuses to auto-apply a fix that contains a risky command (`rm -rf`, `sudo`, `--force`, `reset --hard`, `DROP`, `dd`, `mkfs`, `chmod -R`).
 - New `dejsh guard [zsh|bash|fish] [--install]`: commands containing a secret still run but are never written to your history file. Tested against real shell histories in CI, with a no-guard control that proves the secret *would* otherwise be saved.
 - Completions know about `guard`.
+- Fixed: on bash 5.2+ a multi-step fix could keep running after a failed step, because `&` in a `${var//a/b}` replacement means "the matched text" there. The chain is now built without that construct. Found by CI on Ubuntu; macOS's bash 3.2 never showed it.
 
 ## [0.8.0]
 - Tab completion for zsh, bash and fish: `dejsh completion <shell> [--install]`. Completes commands, flags, and arguments (shells, time windows, files).

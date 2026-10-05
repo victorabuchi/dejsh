@@ -457,7 +457,7 @@ cmd_fix() {
     else printf '  Run `%s` in %s now? [y/N] ' "$fix" "${cwd/#$HOME/~}"; fi
     read -r ans
     if [ "$ans" = y ]; then
-      chain=${steps//$'\n'/ && }
+      chain=$(printf '%s\n' "$steps" | awk 'NR>1{ printf " && " } { printf "%s", $0 }')   # not ${//}: bash 5.2 treats & in a replacement as the matched text
       if ( cd "$cwd" 2>/dev/null && bash -c "$chain" ); then printf '\n  %s✓ done.%s Now re-run: %s\n\n' "$GRN" "$R" "$cmd"
       else printf '\n  %sthe fix failed part-way; nothing after the failing step was run.%s\n\n' "$RED" "$R"; fi
     else echo "  skipped."; fi
@@ -770,8 +770,8 @@ function fish_should_add_to_history
     set -l c $argv[1]
     string match -qr 'AKIA|ASIA|ghp_|gho_|ghs_|ghu_|ghr_|github_pat_|sk-|sk_live|rk_live|xox|[Bb]earer|PASSW|passw|SECRET|secret|TOKEN|token|KEY=|key=|eyJ|AIza|npm_|hf_|pypi-|glpat-|dop_v1_|SG\.|PRIVATE|://.*@' -- $c; or return 0
     string match -q 'dejsh*' -- $c; and return 0
-    set -l kind (printf '%s\n' $c | dejsh guard-check 2>/dev/null)
-    if test $status -eq 0
+    if printf '%s\n' $c | dejsh guard-check >/dev/null 2>&1
+        set -l kind (printf '%s\n' $c | dejsh guard-check 2>/dev/null)
         echo "dejsh: that command looks like it contains a secret ($kind). It ran, but it will not be saved to your history." >&2
         return 1
     end
