@@ -1,6 +1,6 @@
 <div align="center">
 
-# strata
+# hindsh
 
 ### Give your shell a memory.
 
@@ -18,67 +18,67 @@ and audits your history for wasted keystrokes, risky commands and leaked secrets
 
 <br>
 
-<img src="assets/demo.svg" alt="strata checkup, then strata fix recalling that `npm install` fixed `npm start` before" width="780">
+<img src="assets/demo.svg" alt="hindsh checkup, then hindsh fix recalling that `npm install` fixed `npm start` before" width="780">
 
 </div>
 
 ---
 
-## Why strata
+## Why hindsh
 
 Your shell history is a record of everything you do, and it's nearly useless. It can't tell you **where** a command ran, **whether it failed**, or **how long it took**. So every day you re-solve errors you've already solved, retype commands you've typed a thousand times, and lose your place when you return to a project.
 
-strata fixes that in two layers:
+hindsh fixes that in two layers:
 
 | Layer | What it is | Needs install? |
 |---|---|---|
 | **Audit** | Reads the history file you already have. Finds aliases worth making, recurring typos, secrets sitting in plaintext, risky commands, repeated workflows, bad habits. | No. Run it now. |
-| **Memory** | An opt-in recorder adds exit code, duration and directory to each command. On top of that: personal error-fix memory, "where did I leave off", scripts from what just worked. | One command: `strata hook --install` |
+| **Memory** | An opt-in recorder adds exit code, duration and directory to each command. On top of that: personal error-fix memory, "where did I leave off", scripts from what just worked. | One command: `hindsh hook --install` |
 
 It is a single bash script for zsh, bash and fish. No dependencies, no network access, and it writes nothing unless you ask.
 
 ## Quick start
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/victorabuchi/strata/main/install.sh | bash
-strata                       # checkup: what's fixable on your machine
-strata hook --install        # optional: turn on the memory layer, then open a new terminal
+curl -fsSL https://raw.githubusercontent.com/victorabuchi/hindsh/main/install.sh | bash
+hindsh                       # checkup: what's fixable on your machine
+hindsh hook --install        # optional: turn on the memory layer, then open a new terminal
 ```
 
 ```console
-$ strata
+$ hindsh
 
-  STRATA CHECKUP — 4,210 commands in ~/.zsh_history
+  HINDSH CHECKUP — 4,210 commands in ~/.zsh_history
 
-  ✂  ALIASES  47 repeated commands could be aliases (~7,224 keystrokes)   → strata alias
-  ✎  TYPOS    1 recurring typos                                           → strata typos
-  🔑 SECRETS  4 possible secret(s) in plaintext!                          → strata leaks
-  ⛓  FLOWS    13 workflows you repeat could be one command                → strata flows
-  ☢  DANGER   2 risky command patterns in your history                    → strata danger
-  🧭 COACH    1 habits costing you time                                   → strata coach
-  🎙 MEMORY   not recording: unlock fix / resume / slow / safe scripts    → strata hook --install
-  🔍 RECALL   find any past command by keywords                           → strata find <words>
-  🪨 DIG      your history as rock layers                                 → strata dig
+  ✂  ALIASES  47 repeated commands could be aliases (~7,224 keystrokes)   → hindsh alias
+  ✎  TYPOS    1 recurring typos                                           → hindsh typos
+  🔑 SECRETS  4 possible secret(s) in plaintext!                          → hindsh leaks
+  ⛓  FLOWS    13 workflows you repeat could be one command                → hindsh flows
+  ☢  DANGER   2 risky command patterns in your history                    → hindsh danger
+  🧭 COACH    1 habits costing you time                                   → hindsh coach
+  🎙 MEMORY   not recording: unlock fix / resume / slow / safe scripts    → hindsh hook --install
+  🔍 RECALL   find any past command by keywords                           → hindsh find <words>
+  🪨 DIG      your history as rock layers                                 → hindsh dig
 ```
 
 ## Features
 
 ### Memory layer
 
-Run `strata hook --install` once. The recorder appends one line per command to `~/.strata/journal.tsv`. These commands use it:
+Run `hindsh hook --install` once. The recorder appends one line per command to `~/.hindsh/journal.tsv`. These commands use it:
 
 | Command | Solves |
 |---|---|
-| [`strata fix`](#strata-fix) | "That just failed. I know I've fixed this before." |
-| `strata fixes` | "How do I usually fix things?" Your personal troubleshooting memory, including flaky commands that only needed a re-run. |
-| [`strata resume`](#strata-resume) | "Where did I leave off in this project?" `--all` lists every project by recency. |
-| [`strata script`](#strata-script) | "I need to repeat what I just did." |
-| `strata slow` | "Where does my terminal time actually go?" |
+| [`hindsh fix`](#hindsh-fix) | "That just failed. I know I've fixed this before." |
+| `hindsh fixes` | "How do I usually fix things?" Your personal troubleshooting memory, including flaky commands that only needed a re-run. |
+| [`hindsh resume`](#hindsh-resume) | "Where did I leave off in this project?" `--all` lists every project by recency. |
+| [`hindsh script`](#hindsh-script) | "I need to repeat what I just did." |
+| `hindsh slow` | "Where does my terminal time actually go?" |
 
-#### `strata fix`
+#### `hindsh fix`
 
 ```console
-$ strata fix
+$ hindsh fix
 
   last failure (2 min ago, in ~/projects/shopify)
     ✗ npm start  (exit code 1)
@@ -89,18 +89,18 @@ $ strata fix
 
 It learns from your own failures. A failure followed by the commands you ran before it succeeded becomes a remembered fix. Nothing is hard-coded, so it works for your stack, your errors and your fixes.
 
-Add `--run` to apply the remembered fix: `strata fix --run` shows the command, asks `[y/N]`, runs it in the directory where the failure happened, and tells you what to re-run. It never runs anything without asking, and only offers single-command fixes.
+Add `--run` to apply the remembered fix: `hindsh fix --run` shows the command, asks `[y/N]`, runs it in the directory where the failure happened, and tells you what to re-run. It never runs anything without asking, and only offers single-command fixes.
 
-#### `strata resume`
+#### `hindsh resume`
 
 ```console
-$ strata resume
+$ hindsh resume
 
-  WHERE YOU LEFT OFF in ~/projects/strata
+  WHERE YOU LEFT OFF in ~/projects/hindsh
   last session 2 h ago · 6 commands over 43s
 
    ✓ git status
-   ✓ shellcheck strata
+   ✓ shellcheck hindsh
    ✓ git commit -m docs
    ✗ git push origin main (exit 1)
 
@@ -108,18 +108,18 @@ $ strata resume
   git: on main, 1 uncommitted change(s)
 ```
 
-#### `strata script`
+#### `hindsh script`
 
 ```console
-$ strata script -n 5 > setup.sh
+$ hindsh script -n 5 > setup.sh
 
 #!/usr/bin/env bash
-# generated by strata from 5 command(s)
+# generated by hindsh from 5 command(s)
 set -euo pipefail
 
-cd "/Users/you/projects/strata"
+cd "/Users/you/projects/hindsh"
 git status
-shellcheck strata
+shellcheck hindsh
 git add -A
 git commit -m docs
 ```
@@ -132,21 +132,21 @@ These work immediately, from your existing history file.
 
 | Command | Solves | Output |
 |---|---|---|
-| `strata alias` | Retyping the same long commands | Ready-to-paste aliases ranked by keystrokes saved. Avoids names that clash with real commands or your existing aliases. Never suggests a command containing a secret. |
-| `strata typos` | Mistyping `git`, `docker`, `kubectl` | A fix-alias for each recurring typo (`gti` → `git`). |
-| `strata leaks` | A token or password pasted into a command once | Redacted findings for AWS keys, GitHub tokens, `sk-` API keys, Bearer tokens, `KEY=` exports, DB passwords, `user:pass@` URLs. `--scrub` deletes the lines (backup kept). |
-| `strata flows` | Running the same 3 commands in a row | The repeated chain and a one-line alias for it. |
-| `strata danger` | Having run something scary and got lucky | Close calls (`rm -rf ~`, `git push --force`, `curl \| sh`, `DROP TABLE`, `kubectl delete`) with a safer alternative for each. |
-| `strata coach` | Small habits that waste time | `cd ../..` chains, `cat \| grep`, `ps \| grep`, repeated `clear`, long `cd` paths, each with the one-line fix. |
-| `strata find <words>` | "What was that command?" | Matches, most recent first, with date and count. `--raw` prints only the top match. |
-| `strata wrapped` | Wanting to share your terminal year | A card: totals, top tools, personality, hourly rhythm, longest streak. |
-| `strata export` / `strata compare FILE` | "What tools does my teammate use that I don't?" | A profile of tool names and counts only (no arguments, no paths), and a two-way diff. |
-| `strata dig` | Curiosity | Your history as geological layers, with named eras and fossils. |
+| `hindsh alias` | Retyping the same long commands | Ready-to-paste aliases ranked by keystrokes saved. Avoids names that clash with real commands or your existing aliases. Never suggests a command containing a secret. |
+| `hindsh typos` | Mistyping `git`, `docker`, `kubectl` | A fix-alias for each recurring typo (`gti` → `git`). |
+| `hindsh leaks` | A token or password pasted into a command once | Redacted findings for AWS keys, GitHub tokens, `sk-` API keys, Bearer tokens, `KEY=` exports, DB passwords, `user:pass@` URLs. `--scrub` deletes the lines (backup kept). |
+| `hindsh flows` | Running the same 3 commands in a row | The repeated chain and a one-line alias for it. |
+| `hindsh danger` | Having run something scary and got lucky | Close calls (`rm -rf ~`, `git push --force`, `curl \| sh`, `DROP TABLE`, `kubectl delete`) with a safer alternative for each. |
+| `hindsh coach` | Small habits that waste time | `cd ../..` chains, `cat \| grep`, `ps \| grep`, repeated `clear`, long `cd` paths, each with the one-line fix. |
+| `hindsh find <words>` | "What was that command?" | Matches, most recent first, with date and count. `--raw` prints only the top match. |
+| `hindsh wrapped` | Wanting to share your terminal year | A card: totals, top tools, personality, hourly rhythm, longest streak. |
+| `hindsh export` / `hindsh compare FILE` | "What tools does my teammate use that I don't?" | A profile of tool names and counts only (no arguments, no paths), and a two-way diff. |
+| `hindsh dig` | Curiosity | Your history as geological layers, with named eras and fossils. |
 
-#### `strata alias`
+#### `hindsh alias`
 
 ```console
-$ strata alias -n 3
+$ hindsh alias -n 3
 
   alias gpom='git push origin main'
   120× typed · saves ~1920 keystrokes
@@ -157,25 +157,25 @@ $ strata alias -n 3
   alias cdmyawes='cd ~/projects/my-awesome-app'
   40× typed · saves ~800 keystrokes
 
-  Add them:  strata alias --raw >> ~/.zshrc && source ~/.zshrc
+  Add them:  hindsh alias --raw >> ~/.zshrc && source ~/.zshrc
 ```
 
-#### `strata leaks`
+#### `hindsh leaks`
 
 ```console
-$ strata leaks
+$ hindsh leaks
 
   line 623  Secret assignment  export AWS_SECRET_ACCESS_KEY=<wJa...40>
   line 624  GitHub token       git clone https://<ghp...40>@github.com/x/y.git
   line 626  Database password  mysql -u root -p<hun...13> mydb
 
-  3 possible secret(s). Secrets are shown redacted; strata never prints them in full.
+  3 possible secret(s). Secrets are shown redacted; hindsh never prints them in full.
   Rotate these credentials — deleting history does not un-leak anything already synced or backed up.
 ```
 
-Rotate anything it finds. `strata leaks --scrub` then removes those lines after you confirm and keeps a `.strata-backup` copy. Open a new shell afterwards, because a running shell may write its in-memory history back on exit.
+Rotate anything it finds. `hindsh leaks --scrub` then removes those lines after you confirm and keeps a `.hindsh-backup` copy. Open a new shell afterwards, because a running shell may write its in-memory history back on exit.
 
-#### `strata wrapped`
+#### `hindsh wrapped`
 
 ```console
   ╭──────────────────────────────────────────────────╮
@@ -192,11 +192,11 @@ Rotate anything it finds. `strata leaks --scrub` then removes those lines after 
   ╰──────────────────────────────────────────────────╯
 ```
 
-#### `strata compare`
+#### `hindsh compare`
 
 ```console
-$ strata export > me.tsv                 # share this: tool names and counts only
-$ strata compare senior-dev.tsv
+$ hindsh export > me.tsv                 # share this: tool names and counts only
+$ hindsh compare senior-dev.tsv
 
   THEY USE, YOU NEVER HAVE
 
@@ -213,23 +213,23 @@ $ strata compare senior-dev.tsv
 **One-liner** (installs to `~/.local/bin`):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/victorabuchi/strata/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/victorabuchi/hindsh/main/install.sh | bash
 ```
 
 **Homebrew:**
 
 ```sh
-brew install victorabuchi/strata/strata
+brew install victorabuchi/hindsh/hindsh
 ```
 
 **From a clone:**
 
 ```sh
-git clone https://github.com/victorabuchi/strata.git
-cd strata && ./install.sh          # or: PREFIX_BIN=/usr/local/bin ./install.sh
+git clone https://github.com/victorabuchi/hindsh.git
+cd hindsh && ./install.sh          # or: PREFIX_BIN=/usr/local/bin ./install.sh
 ```
 
-**No install:** `./strata` runs in place.
+**No install:** `./hindsh` runs in place.
 
 If `~/.local/bin` isn't on your `PATH`, add `export PATH="$HOME/.local/bin:$PATH"` to your `~/.zshrc` or `~/.bashrc`.
 
@@ -238,7 +238,7 @@ If `~/.local/bin` isn't on your `PATH`, add `export PATH="$HOME/.local/bin:$PATH
 ## Usage
 
 ```
-strata [command] [options]
+hindsh [command] [options]
 
   -f FILE      history file (default: $HISTFILE, ~/.zsh_history, ~/.bash_history)
   -n N         rows to show (default 10)
@@ -251,7 +251,7 @@ strata [command] [options]
   -l N -w N    with `dig`: number of layers, width
 ```
 
-Run `strata help` for the full command list.
+Run `hindsh help` for the full command list.
 
 ## Timestamps (optional, improves dates and flows)
 
@@ -263,35 +263,35 @@ Without timestamps everything still works. `flows` just can't filter by time gap
 
 ## How it works
 
-1. **Load.** One pass normalises your history (zsh extended format, bash timestamp comments) into `time, command` rows. strata's own invocations are excluded.
+1. **Load.** One pass normalises your history (zsh extended format, bash timestamp comments) into `time, command` rows. hindsh's own invocations are excluded.
 2. **Analyse.** Each command is a small `awk` program over those rows. Command keys treat `git push` and `docker compose` as distinct tools, and skip `sudo`, `time` and `VAR=x` prefixes.
 3. **Remember (optional).** The recorder is a few lines of `preexec`/`precmd` (zsh) or `DEBUG` trap/`PROMPT_COMMAND` (bash). It appends `epoch, exit code, duration, cwd, command` to a plain TSV file you can read, grep or delete.
 4. **Render.** Output is plain text with ANSI colour. Every analysis also has a machine-friendly form (`--raw`, `export`).
 
 ## Privacy
 
-- **Local only.** strata makes no network requests.
-- **Writes are limited to:** the history file during `leaks --scrub` (with a backup), and `~/.strata/journal.tsv` if you install the recorder (mode 600).
+- **Local only.** hindsh makes no network requests.
+- **Writes are limited to:** the history file during `leaks --scrub` (with a backup), and `~/.hindsh/journal.tsv` if you install the recorder (mode 600).
 - **The recorder skips** commands containing `token`, `secret`, `password`, `apikey`, `bearer`, `akia`, `private key`, and any command starting with a space.
 - **Secrets are never printed in full.** `leaks` shows a redacted preview.
-- **Sharing is opt-in and minimal.** `strata export` emits tool names and counts only, never arguments or paths.
-- **Remove the recorder** by deleting the block between the `strata recorder` markers in your rc file, and `~/.strata/` if you want the data gone.
+- **Sharing is opt-in and minimal.** `hindsh export` emits tool names and counts only, never arguments or paths.
+- **Remove the recorder** by deleting the block between the `hindsh recorder` markers in your rc file, and `~/.hindsh/` if you want the data gone.
 
 ## FAQ
 
 **Does the recorder slow down my shell?**
 It adds one `printf` append per command. The zsh version forks nothing. The bash version makes one `date` call per prompt, because bash 3.2 has no built-in epoch clock.
 
-**Why doesn't `strata fix` know my fix yet?**
+**Why doesn't `hindsh fix` know my fix yet?**
 It learns from failures you've already had since installing the recorder. It needs a command to fail and later succeed within 15 minutes, and the pattern to repeat at least twice.
 
 **Will `leaks` catch everything?**
 No. It is pattern-based and misses secrets with no recognisable shape. Treat it as a smoke detector, not an audit.
 
 **Does it work with fish?**
-Yes. strata reads `~/.local/share/fish/fish_history`, and `strata hook fish --install` adds the recorder to `~/.config/fish/config.fish`. The fish recorder is newer than the zsh and bash ones, so please open an issue if it misbehaves.
+Yes. hindsh reads `~/.local/share/fish/fish_history`, and `hindsh hook fish --install` adds the recorder to `~/.config/fish/config.fish`. The fish recorder is newer than the zsh and bash ones, so please open an issue if it misbehaves.
 
-**Is it safe to run `strata alias --raw >> ~/.zshrc`?**
+**Is it safe to run `hindsh alias --raw >> ~/.zshrc`?**
 It skips names that already exist as commands or aliases and never emits commands that look like they contain secrets. Skim the output first if you like. It's plain alias lines.
 
 ## Limits
