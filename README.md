@@ -19,7 +19,7 @@ and audits your history for wasted keystrokes, risky commands and leaked secrets
 
 <br>
 
-<img src="assets/demo.svg" alt="dejsh checkup, then dejsh fix recalling that `npm install` fixed `npm start` before" width="780">
+<img src="assets/demo.gif" alt="A real terminal session: git status fails, dejsh fix --run recalls that git init fixed it before and applies it on confirmation, git status then works, and dejsh fixes lists the learned fixes" width="820">
 
 </div>
 
@@ -299,6 +299,7 @@ It skips names that already exist as commands or aliases and never emits command
 
 ## Limits
 
+- A multi-line block pasted into the terminal is recorded as one entry (the shell runs it as a single command line), so it teaches dejsh nothing about the individual commands. Type commands one at a time.
 - Plain history has no exit codes or directories. `fix`, `fixes`, `resume`, `slow` and success-only `script` only know about commands run after you install the recorder.
 - Typo detection compares against tools you use often, and skips anything that exists on your `PATH`.
 - `wrapped` computes hours using your current timezone offset, so it can be off by an hour across daylight-saving changes.
