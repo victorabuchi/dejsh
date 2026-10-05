@@ -312,7 +312,7 @@ t "guard-check flags a secret"       test "$(printf 'export X=%s\n' "$STRIPE" | 
 t "guard-check clears normal input"  sh -c "echo 'ls -la' | \"$D\" guard-check; [ \$? -ne 0 ]"
 t "guard zsh snippet"  has "$("$D" guard zsh)"  "zshaddhistory"
 t "guard bash snippet" has "$("$D" guard bash)" "history -d"
-t "guard fish snippet" has "$("$D" guard fish)" "fish_should_add_to_history"
+t "guard fish snippet" has "$("$D" guard fish)" "history delete"
 DIR_D=$(dirname "$D")
 # negative control: the same session WITHOUT the guard must save the secret (proves the guard tests can fail)
 if command -v zsh >/dev/null 2>&1; then
@@ -341,7 +341,7 @@ if command -v fish >/dev/null 2>&1; then
   GF=$(mktemp -d); mkdir -p "$GF/.config/fish"; { printf 'set -gx PATH "%s" $PATH\n' "$DIR_D"; "$D" guard fish; } > "$GF/.config/fish/config.fish"
   PTY_SECRET="$STRIPE" pty_session "$GF" "$GF/.config" fish -i >/dev/null 2>&1
   hf=$(cat "$GF/.local/share/fish/fish_history" 2>/dev/null)
-  case $hf in *"$STRIPE"*) echo "  --- fish guard diagnostics: $(fish --version)"; echo "  history tail:"; tail -6 "$GF/.local/share/fish/fish_history" 2>&1 | cut -c1-120; echo "  function defined? $(fish -c 'functions -q fish_should_add_to_history; and echo yes; or echo no' 2>&1)"; echo "  guard-check on PATH in fish? $(PATH="$DIR_D:$PATH" fish -c 'printf "x=%s\n" '"$STRIPE"' | dejsh guard-check' 2>&1 | head -2)";; esac
+  case $hf in *"$STRIPE"*) echo "  --- fish guard diagnostics: $(fish --version)"; echo "  history tail:"; tail -6 "$GF/.local/share/fish/fish_history" 2>&1 | cut -c1-120; echo "  function defined? $(HOME=$GF XDG_CONFIG_HOME=$GF/.config fish -c 'functions -q _dejsh_guard; and echo yes; or echo no' 2>&1)"; echo "  guard-check on PATH in fish? $(PATH="$DIR_D:$PATH" fish -c 'printf "x=%s\n" '"$STRIPE"' | dejsh guard-check' 2>&1 | head -2)";; esac
   t "fish guard keeps normal commands in history" has "$hf" "echo hello"
   t "fish guard kept the secret out of history"   hasnt "$hf" "$STRIPE"
 fi

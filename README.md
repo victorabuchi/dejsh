@@ -196,7 +196,7 @@ dejsh: that command looks like it contains a secret (Stripe live key). It ran, b
 
 How it works and what it does not do:
 
-- **zsh** uses the `zshaddhistory` hook (the command stays in this session's up-arrow list, but is not written to disk). **bash** deletes the entry from the in-memory history right after it runs. **fish** uses `fish_should_add_to_history`.
+- **zsh** uses the `zshaddhistory` hook (the command stays in this session's up-arrow list, but is not written to disk). **bash** deletes the entry from the in-memory history right after it runs. **fish** deletes the entry from its history right after it runs (`history delete`), because older fish versions ignore `fish_should_add_to_history`.
 - A cheap pattern check runs first, so ordinary commands are never slowed down; only suspicious ones are checked properly. Nothing is sent anywhere, and the secret is passed to the checker over stdin, never as a process argument.
 - It acts the moment you press Enter. It cannot stop you typing a secret, and it does not stop the command itself from running, from appearing on screen or in your terminal's scrollback, or from reaching a recorder other than dejsh's.
 - It uses the same patterns as `dejsh leaks`, so it shares the same limits: it misses secrets with no recognisable shape.

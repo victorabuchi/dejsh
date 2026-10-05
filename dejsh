@@ -766,16 +766,15 @@ Z
 ;;
   fish) IFS= read -r -d '' snippet <<'Z' || true
 # >>> dejsh guard (fish) >>>
-function fish_should_add_to_history
+function _dejsh_guard --on-event fish_postexec
     set -l c $argv[1]
     string match -qr 'AKIA|ASIA|ghp_|gho_|ghs_|ghu_|ghr_|github_pat_|sk-|sk_live|rk_live|xox|[Bb]earer|PASSW|passw|SECRET|secret|TOKEN|token|KEY=|key=|eyJ|AIza|npm_|hf_|pypi-|glpat-|dop_v1_|SG\.|PRIVATE|://.*@' -- $c; or return 0
     string match -q 'dejsh*' -- $c; and return 0
     if printf '%s\n' $c | dejsh guard-check >/dev/null 2>&1
         set -l kind (printf '%s\n' $c | dejsh guard-check 2>/dev/null)
-        echo "dejsh: that command looks like it contains a secret ($kind). It ran, but it will not be saved to your history." >&2
-        return 1
+        builtin history delete --exact --case-sensitive -- $c
+        echo "dejsh: that command looks like it contains a secret ($kind). It ran, but it was removed from your history." >&2
     end
-    return 0
 end
 # <<< dejsh guard <<<
 Z
