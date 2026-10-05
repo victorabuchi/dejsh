@@ -24,18 +24,30 @@ env = dict(os.environ, HOME=home, XDG_CONFIG_HOME=cfg, TERM="xterm", ZDOTDIR=hom
 pid, fd = pty.fork()
 if pid == 0:
     os.execvpe(argv[0], argv, env)
-def drain(t):
-    end = time.time() + t
+log = open(os.environ["PTY_LOG"], "ab") if os.environ.get("PTY_LOG") else None
+buf = b""
+def pump(t, quiet=None):
+    """Read for up to t seconds; answer terminal capability queries; return early after `quiet` seconds of silence."""
+    global buf
+    end = time.time() + t; last = time.time()
     while time.time() < end:
         r, _, _ = select.select([fd], [], [], 0.1)
         if r:
-            try:
-                if not os.read(fd, 4096): return
+            try: d = os.read(fd, 4096)
             except OSError: return
-drain(2.5)
-for cmd in ["echo hello", "false", "export API_TOKEN=abc123", "exit"]:
-    os.write(fd, (cmd + "\r").encode()); drain(1.2)
-end = time.time() + 4
+            if not d: return
+            last = time.time(); buf += d
+            if log: log.write(d); log.flush()
+            if b"\x1b[c" in buf or b"\x1b[0c" in buf: os.write(fd, b"\x1b[?62;22c"); buf = buf.replace(b"\x1b[c", b"").replace(b"\x1b[0c", b"")
+            if b"\x1b[?u" in buf: os.write(fd, b"\x1b[?0u"); buf = buf.replace(b"\x1b[?u", b"")
+            if b"\x1b[>q" in buf: os.write(fd, b"\x1bP>|xterm(1)\x1b\\\\"); buf = buf.replace(b"\x1b[>q", b"")
+            buf = buf[-64:]
+        elif quiet and time.time() - last >= quiet:
+            return
+pump(8, quiet=1.5)
+for cmd in [":", "echo hello", "false", "export API_TOKEN=abc123", "exit"]:
+    os.write(fd, (cmd + "\r").encode()); pump(2.0, quiet=0.8)
+end = time.time() + 5
 while time.time() < end:
     try:
         p, _ = os.waitpid(pid, os.WNOHANG)
@@ -204,8 +216,9 @@ out=$("$D" slow --json); t "slow json has seconds" has "$out" '"total_seconds"'
 
 if command -v fish >/dev/null 2>&1; then
   FF=$(mktemp -d); mkdir -p "$FF/.config/fish"; "$D" hook fish > "$FF/.config/fish/config.fish"
-  pty_session "$FF" "$FF/.config" fish -i >/dev/null 2>&1
+  PTY_LOG=$FF/pty.log pty_session "$FF" "$FF/.config" fish -i >/dev/null 2>&1
   jr=$(cat "$FF/.dejsh/journal.tsv" 2>/dev/null)
+  case $jr in *"echo hello"*) ;; *) echo "  --- fish diagnostics: version=$(fish --version) journal=[$jr]"; tr -c '[:print:]\n' '?' < "$FF/pty.log" 2>/dev/null | tail -25;; esac
   t "fish recorder records commands"    has "$jr" "echo hello"
   t "fish recorder captures exit code"  has "$jr" "$(printf '\t1\t')"
   t "fish recorder skips secrets"       hasnt "$jr" "API_TOKEN"
