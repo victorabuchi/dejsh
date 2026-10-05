@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Installs hindsh into ~/.local/bin (override with PREFIX_BIN=/some/dir)
+# Installs dejsh into ~/.local/bin (override with PREFIX_BIN=/some/dir)
 set -e
 DEST=${PREFIX_BIN:-$HOME/.local/bin}
-URL=https://raw.githubusercontent.com/victorabuchi/hindsh/main/hindsh
+URL=https://raw.githubusercontent.com/victorabuchi/dejsh/main/dejsh
 mkdir -p "$DEST"
-if [ -f "$(dirname "$0")/hindsh" ]; then cp "$(dirname "$0")/hindsh" "$DEST/hindsh"; else curl -fsSL "$URL" -o "$DEST/hindsh"; fi
-chmod +x "$DEST/hindsh"
-echo "Installed to $DEST/hindsh"
+if [ -f "$(dirname "$0")/dejsh" ]; then cp "$(dirname "$0")/dejsh" "$DEST/dejsh"; else curl -fsSL "$URL" -o "$DEST/dejsh"; fi
+chmod +x "$DEST/dejsh"
+echo "Installed to $DEST/dejsh"
 case ":$PATH:" in *":$DEST:"*) ;; *) echo "Add this to your shell profile: export PATH=\"$DEST:\$PATH\"";; esac

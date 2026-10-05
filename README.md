@@ -1,6 +1,6 @@
 <div align="center">
 
-# hindsh
+# dejsh
 
 ### Give your shell a memory.
 
@@ -18,67 +18,69 @@ and audits your history for wasted keystrokes, risky commands and leaked secrets
 
 <br>
 
-<img src="assets/demo.svg" alt="hindsh checkup, then hindsh fix recalling that `npm install` fixed `npm start` before" width="780">
+<img src="assets/demo.svg" alt="dejsh checkup, then dejsh fix recalling that `npm install` fixed `npm start` before" width="780">
 
 </div>
 
 ---
 
-## Why hindsh
+## Why dejsh
+
+*dejsh* is "déjà vu" + "sh": that feeling of having seen this error before, except your shell actually remembers how you fixed it.
 
 Your shell history is a record of everything you do, and it's nearly useless. It can't tell you **where** a command ran, **whether it failed**, or **how long it took**. So every day you re-solve errors you've already solved, retype commands you've typed a thousand times, and lose your place when you return to a project.
 
-hindsh fixes that in two layers:
+dejsh fixes that in two layers:
 
 | Layer | What it is | Needs install? |
 |---|---|---|
 | **Audit** | Reads the history file you already have. Finds aliases worth making, recurring typos, secrets sitting in plaintext, risky commands, repeated workflows, bad habits. | No. Run it now. |
-| **Memory** | An opt-in recorder adds exit code, duration and directory to each command. On top of that: personal error-fix memory, "where did I leave off", scripts from what just worked. | One command: `hindsh hook --install` |
+| **Memory** | An opt-in recorder adds exit code, duration and directory to each command. On top of that: personal error-fix memory, "where did I leave off", scripts from what just worked. | One command: `dejsh hook --install` |
 
 It is a single bash script for zsh, bash and fish. No dependencies, no network access, and it writes nothing unless you ask.
 
 ## Quick start
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/victorabuchi/hindsh/main/install.sh | bash
-hindsh                       # checkup: what's fixable on your machine
-hindsh hook --install        # optional: turn on the memory layer, then open a new terminal
+curl -fsSL https://raw.githubusercontent.com/victorabuchi/dejsh/main/install.sh | bash
+dejsh                       # checkup: what's fixable on your machine
+dejsh hook --install        # optional: turn on the memory layer, then open a new terminal
 ```
 
 ```console
-$ hindsh
+$ dejsh
 
-  HINDSH CHECKUP — 4,210 commands in ~/.zsh_history
+  DEJSH CHECKUP — 4,210 commands in ~/.zsh_history
 
-  ✂  ALIASES  47 repeated commands could be aliases (~7,224 keystrokes)   → hindsh alias
-  ✎  TYPOS    1 recurring typos                                           → hindsh typos
-  🔑 SECRETS  4 possible secret(s) in plaintext!                          → hindsh leaks
-  ⛓  FLOWS    13 workflows you repeat could be one command                → hindsh flows
-  ☢  DANGER   2 risky command patterns in your history                    → hindsh danger
-  🧭 COACH    1 habits costing you time                                   → hindsh coach
-  🎙 MEMORY   not recording: unlock fix / resume / slow / safe scripts    → hindsh hook --install
-  🔍 RECALL   find any past command by keywords                           → hindsh find <words>
-  🪨 DIG      your history as rock layers                                 → hindsh dig
+  ✂  ALIASES  47 repeated commands could be aliases (~7,224 keystrokes)   → dejsh alias
+  ✎  TYPOS    1 recurring typos                                           → dejsh typos
+  🔑 SECRETS  4 possible secret(s) in plaintext!                          → dejsh leaks
+  ⛓  FLOWS    13 workflows you repeat could be one command                → dejsh flows
+  ☢  DANGER   2 risky command patterns in your history                    → dejsh danger
+  🧭 COACH    1 habits costing you time                                   → dejsh coach
+  🎙 MEMORY   not recording: unlock fix / resume / slow / safe scripts    → dejsh hook --install
+  🔍 RECALL   find any past command by keywords                           → dejsh find <words>
+  🪨 DIG      your history as rock layers                                 → dejsh dig
 ```
 
 ## Features
 
 ### Memory layer
 
-Run `hindsh hook --install` once. The recorder appends one line per command to `~/.hindsh/journal.tsv`. These commands use it:
+Run `dejsh hook --install` once. The recorder appends one line per command to `~/.dejsh/journal.tsv`. These commands use it:
 
 | Command | Solves |
 |---|---|
-| [`hindsh fix`](#hindsh-fix) | "That just failed. I know I've fixed this before." |
-| `hindsh fixes` | "How do I usually fix things?" Your personal troubleshooting memory, including flaky commands that only needed a re-run. |
-| [`hindsh resume`](#hindsh-resume) | "Where did I leave off in this project?" `--all` lists every project by recency. |
-| [`hindsh script`](#hindsh-script) | "I need to repeat what I just did." |
-| `hindsh slow` | "Where does my terminal time actually go?" |
+| [`dejsh fix`](#dejsh-fix) | "That just failed. I know I've fixed this before." |
+| `dejsh fixes` | "How do I usually fix things?" Your personal troubleshooting memory, including flaky commands that only needed a re-run. |
+| [`dejsh resume`](#dejsh-resume) | "Where did I leave off in this project?" `--all` lists every project by recency. |
+| [`dejsh script`](#dejsh-script) | "I need to repeat what I just did." |
+| `dejsh slow` | "Where does my terminal time actually go?" |
 
-#### `hindsh fix`
+#### `dejsh fix`
 
 ```console
-$ hindsh fix
+$ dejsh fix
 
   last failure (2 min ago, in ~/projects/shopify)
     ✗ npm start  (exit code 1)
@@ -89,18 +91,18 @@ $ hindsh fix
 
 It learns from your own failures. A failure followed by the commands you ran before it succeeded becomes a remembered fix. Nothing is hard-coded, so it works for your stack, your errors and your fixes.
 
-Add `--run` to apply the remembered fix: `hindsh fix --run` shows the command, asks `[y/N]`, runs it in the directory where the failure happened, and tells you what to re-run. It never runs anything without asking, and only offers single-command fixes.
+Add `--run` to apply the remembered fix: `dejsh fix --run` shows the command, asks `[y/N]`, runs it in the directory where the failure happened, and tells you what to re-run. It never runs anything without asking, and only offers single-command fixes.
 
-#### `hindsh resume`
+#### `dejsh resume`
 
 ```console
-$ hindsh resume
+$ dejsh resume
 
-  WHERE YOU LEFT OFF in ~/projects/hindsh
+  WHERE YOU LEFT OFF in ~/projects/dejsh
   last session 2 h ago · 6 commands over 43s
 
    ✓ git status
-   ✓ shellcheck hindsh
+   ✓ shellcheck dejsh
    ✓ git commit -m docs
    ✗ git push origin main (exit 1)
 
@@ -108,18 +110,18 @@ $ hindsh resume
   git: on main, 1 uncommitted change(s)
 ```
 
-#### `hindsh script`
+#### `dejsh script`
 
 ```console
-$ hindsh script -n 5 > setup.sh
+$ dejsh script -n 5 > setup.sh
 
 #!/usr/bin/env bash
-# generated by hindsh from 5 command(s)
+# generated by dejsh from 5 command(s)
 set -euo pipefail
 
-cd "/Users/you/projects/hindsh"
+cd "/Users/you/projects/dejsh"
 git status
-shellcheck hindsh
+shellcheck dejsh
 git add -A
 git commit -m docs
 ```
@@ -132,21 +134,21 @@ These work immediately, from your existing history file.
 
 | Command | Solves | Output |
 |---|---|---|
-| `hindsh alias` | Retyping the same long commands | Ready-to-paste aliases ranked by keystrokes saved. Avoids names that clash with real commands or your existing aliases. Never suggests a command containing a secret. |
-| `hindsh typos` | Mistyping `git`, `docker`, `kubectl` | A fix-alias for each recurring typo (`gti` → `git`). |
-| `hindsh leaks` | A token or password pasted into a command once | Redacted findings for AWS keys, GitHub tokens, `sk-` API keys, Bearer tokens, `KEY=` exports, DB passwords, `user:pass@` URLs. `--scrub` deletes the lines (backup kept). |
-| `hindsh flows` | Running the same 3 commands in a row | The repeated chain and a one-line alias for it. |
-| `hindsh danger` | Having run something scary and got lucky | Close calls (`rm -rf ~`, `git push --force`, `curl \| sh`, `DROP TABLE`, `kubectl delete`) with a safer alternative for each. |
-| `hindsh coach` | Small habits that waste time | `cd ../..` chains, `cat \| grep`, `ps \| grep`, repeated `clear`, long `cd` paths, each with the one-line fix. |
-| `hindsh find <words>` | "What was that command?" | Matches, most recent first, with date and count. `--raw` prints only the top match. |
-| `hindsh wrapped` | Wanting to share your terminal year | A card: totals, top tools, personality, hourly rhythm, longest streak. |
-| `hindsh export` / `hindsh compare FILE` | "What tools does my teammate use that I don't?" | A profile of tool names and counts only (no arguments, no paths), and a two-way diff. |
-| `hindsh dig` | Curiosity | Your history as geological layers, with named eras and fossils. |
+| `dejsh alias` | Retyping the same long commands | Ready-to-paste aliases ranked by keystrokes saved. Avoids names that clash with real commands or your existing aliases. Never suggests a command containing a secret. |
+| `dejsh typos` | Mistyping `git`, `docker`, `kubectl` | A fix-alias for each recurring typo (`gti` → `git`). |
+| `dejsh leaks` | A token or password pasted into a command once | Redacted findings for AWS keys, GitHub tokens, `sk-` API keys, Bearer tokens, `KEY=` exports, DB passwords, `user:pass@` URLs. `--scrub` deletes the lines (backup kept). |
+| `dejsh flows` | Running the same 3 commands in a row | The repeated chain and a one-line alias for it. |
+| `dejsh danger` | Having run something scary and got lucky | Close calls (`rm -rf ~`, `git push --force`, `curl \| sh`, `DROP TABLE`, `kubectl delete`) with a safer alternative for each. |
+| `dejsh coach` | Small habits that waste time | `cd ../..` chains, `cat \| grep`, `ps \| grep`, repeated `clear`, long `cd` paths, each with the one-line fix. |
+| `dejsh find <words>` | "What was that command?" | Matches, most recent first, with date and count. `--raw` prints only the top match. |
+| `dejsh wrapped` | Wanting to share your terminal year | A card: totals, top tools, personality, hourly rhythm, longest streak. |
+| `dejsh export` / `dejsh compare FILE` | "What tools does my teammate use that I don't?" | A profile of tool names and counts only (no arguments, no paths), and a two-way diff. |
+| `dejsh dig` | Curiosity | Your history as geological layers, with named eras and fossils. |
 
-#### `hindsh alias`
+#### `dejsh alias`
 
 ```console
-$ hindsh alias -n 3
+$ dejsh alias -n 3
 
   alias gpom='git push origin main'
   120× typed · saves ~1920 keystrokes
@@ -157,25 +159,25 @@ $ hindsh alias -n 3
   alias cdmyawes='cd ~/projects/my-awesome-app'
   40× typed · saves ~800 keystrokes
 
-  Add them:  hindsh alias --raw >> ~/.zshrc && source ~/.zshrc
+  Add them:  dejsh alias --raw >> ~/.zshrc && source ~/.zshrc
 ```
 
-#### `hindsh leaks`
+#### `dejsh leaks`
 
 ```console
-$ hindsh leaks
+$ dejsh leaks
 
   line 623  Secret assignment  export AWS_SECRET_ACCESS_KEY=<wJa...40>
   line 624  GitHub token       git clone https://<ghp...40>@github.com/x/y.git
   line 626  Database password  mysql -u root -p<hun...13> mydb
 
-  3 possible secret(s). Secrets are shown redacted; hindsh never prints them in full.
+  3 possible secret(s). Secrets are shown redacted; dejsh never prints them in full.
   Rotate these credentials — deleting history does not un-leak anything already synced or backed up.
 ```
 
-Rotate anything it finds. `hindsh leaks --scrub` then removes those lines after you confirm and keeps a `.hindsh-backup` copy. Open a new shell afterwards, because a running shell may write its in-memory history back on exit.
+Rotate anything it finds. `dejsh leaks --scrub` then removes those lines after you confirm and keeps a `.dejsh-backup` copy. Open a new shell afterwards, because a running shell may write its in-memory history back on exit.
 
-#### `hindsh wrapped`
+#### `dejsh wrapped`
 
 ```console
   ╭──────────────────────────────────────────────────╮
@@ -192,11 +194,11 @@ Rotate anything it finds. `hindsh leaks --scrub` then removes those lines after 
   ╰──────────────────────────────────────────────────╯
 ```
 
-#### `hindsh compare`
+#### `dejsh compare`
 
 ```console
-$ hindsh export > me.tsv                 # share this: tool names and counts only
-$ hindsh compare senior-dev.tsv
+$ dejsh export > me.tsv                 # share this: tool names and counts only
+$ dejsh compare senior-dev.tsv
 
   THEY USE, YOU NEVER HAVE
 
@@ -213,23 +215,23 @@ $ hindsh compare senior-dev.tsv
 **One-liner** (installs to `~/.local/bin`):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/victorabuchi/hindsh/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/victorabuchi/dejsh/main/install.sh | bash
 ```
 
 **Homebrew:**
 
 ```sh
-brew install victorabuchi/hindsh/hindsh
+brew install victorabuchi/dejsh/dejsh
 ```
 
 **From a clone:**
 
 ```sh
-git clone https://github.com/victorabuchi/hindsh.git
-cd hindsh && ./install.sh          # or: PREFIX_BIN=/usr/local/bin ./install.sh
+git clone https://github.com/victorabuchi/dejsh.git
+cd dejsh && ./install.sh          # or: PREFIX_BIN=/usr/local/bin ./install.sh
 ```
 
-**No install:** `./hindsh` runs in place.
+**No install:** `./dejsh` runs in place.
 
 If `~/.local/bin` isn't on your `PATH`, add `export PATH="$HOME/.local/bin:$PATH"` to your `~/.zshrc` or `~/.bashrc`.
 
@@ -238,7 +240,7 @@ If `~/.local/bin` isn't on your `PATH`, add `export PATH="$HOME/.local/bin:$PATH
 ## Usage
 
 ```
-hindsh [command] [options]
+dejsh [command] [options]
 
   -f FILE      history file (default: $HISTFILE, ~/.zsh_history, ~/.bash_history)
   -n N         rows to show (default 10)
@@ -251,7 +253,7 @@ hindsh [command] [options]
   -l N -w N    with `dig`: number of layers, width
 ```
 
-Run `hindsh help` for the full command list.
+Run `dejsh help` for the full command list.
 
 ## Timestamps (optional, improves dates and flows)
 
@@ -263,35 +265,35 @@ Without timestamps everything still works. `flows` just can't filter by time gap
 
 ## How it works
 
-1. **Load.** One pass normalises your history (zsh extended format, bash timestamp comments) into `time, command` rows. hindsh's own invocations are excluded.
+1. **Load.** One pass normalises your history (zsh extended format, bash timestamp comments) into `time, command` rows. dejsh's own invocations are excluded.
 2. **Analyse.** Each command is a small `awk` program over those rows. Command keys treat `git push` and `docker compose` as distinct tools, and skip `sudo`, `time` and `VAR=x` prefixes.
 3. **Remember (optional).** The recorder is a few lines of `preexec`/`precmd` (zsh) or `DEBUG` trap/`PROMPT_COMMAND` (bash). It appends `epoch, exit code, duration, cwd, command` to a plain TSV file you can read, grep or delete.
 4. **Render.** Output is plain text with ANSI colour. Every analysis also has a machine-friendly form (`--raw`, `export`).
 
 ## Privacy
 
-- **Local only.** hindsh makes no network requests.
-- **Writes are limited to:** the history file during `leaks --scrub` (with a backup), and `~/.hindsh/journal.tsv` if you install the recorder (mode 600).
+- **Local only.** dejsh makes no network requests.
+- **Writes are limited to:** the history file during `leaks --scrub` (with a backup), and `~/.dejsh/journal.tsv` if you install the recorder (mode 600).
 - **The recorder skips** commands containing `token`, `secret`, `password`, `apikey`, `bearer`, `akia`, `private key`, and any command starting with a space.
 - **Secrets are never printed in full.** `leaks` shows a redacted preview.
-- **Sharing is opt-in and minimal.** `hindsh export` emits tool names and counts only, never arguments or paths.
-- **Remove the recorder** by deleting the block between the `hindsh recorder` markers in your rc file, and `~/.hindsh/` if you want the data gone.
+- **Sharing is opt-in and minimal.** `dejsh export` emits tool names and counts only, never arguments or paths.
+- **Remove the recorder** by deleting the block between the `dejsh recorder` markers in your rc file, and `~/.dejsh/` if you want the data gone.
 
 ## FAQ
 
 **Does the recorder slow down my shell?**
 It adds one `printf` append per command. The zsh version forks nothing. The bash version makes one `date` call per prompt, because bash 3.2 has no built-in epoch clock.
 
-**Why doesn't `hindsh fix` know my fix yet?**
+**Why doesn't `dejsh fix` know my fix yet?**
 It learns from failures you've already had since installing the recorder. It needs a command to fail and later succeed within 15 minutes, and the pattern to repeat at least twice.
 
 **Will `leaks` catch everything?**
 No. It is pattern-based and misses secrets with no recognisable shape. Treat it as a smoke detector, not an audit.
 
 **Does it work with fish?**
-Yes. hindsh reads `~/.local/share/fish/fish_history`, and `hindsh hook fish --install` adds the recorder to `~/.config/fish/config.fish`. The fish recorder is newer than the zsh and bash ones, so please open an issue if it misbehaves.
+Yes. dejsh reads `~/.local/share/fish/fish_history`, and `dejsh hook fish --install` adds the recorder to `~/.config/fish/config.fish`. The fish recorder is newer than the zsh and bash ones, so please open an issue if it misbehaves.
 
-**Is it safe to run `hindsh alias --raw >> ~/.zshrc`?**
+**Is it safe to run `dejsh alias --raw >> ~/.zshrc`?**
 It skips names that already exist as commands or aliases and never emits commands that look like they contain secrets. Skim the output first if you like. It's plain alias lines.
 
 ## Limits

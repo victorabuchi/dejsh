@@ -1,33 +1,33 @@
 #!/usr/bin/env bash
-# hindsh — your shell history, audited: aliases, typos, leaked secrets, repeated workflows, recall.
-VERSION=0.5.0
-LAYERS=8; WIDTH=64; TOPN=10; RAW=0; SCRUB=0; JSON=0; RUN=0; ALL=0; INSTALL=0; SINCE=0; HFILE=${HINDSH_HIST:-}
+# dejsh — your shell history, audited: aliases, typos, leaked secrets, repeated workflows, recall.
+VERSION=0.6.0
+LAYERS=8; WIDTH=64; TOPN=10; RAW=0; SCRUB=0; JSON=0; RUN=0; ALL=0; INSTALL=0; SINCE=0; HFILE=${DEJSH_HIST:-}
 B=$'\033[1m'; D=$'\033[2m'; R=$'\033[0m'; GRN=$'\033[32m'; YEL=$'\033[33m'; RED=$'\033[31m'; CYN=$'\033[36m'
 
 usage() { cat <<U
-${B}hindsh${R} $VERSION — find what's fixable in your shell history
+${B}dejsh${R} $VERSION — find what's fixable in your shell history
 
-  hindsh                   checkup: what hindsh found on your machine
-  hindsh alias             commands you retype a lot -> ready-to-paste aliases
-  hindsh typos             recurring typos (gti, dokcer...) -> fix-aliases
-  hindsh leaks [--scrub]   passwords/API keys sitting in plaintext in history
-  hindsh flows             command sequences you repeat -> one-command macros
-  hindsh find <words...>   "what was that command?" — search by keywords
-  hindsh dig               your history as geological layers (-l layers, -w width)
+  dejsh                   checkup: what dejsh found on your machine
+  dejsh alias             commands you retype a lot -> ready-to-paste aliases
+  dejsh typos             recurring typos (gti, dokcer...) -> fix-aliases
+  dejsh leaks [--scrub]   passwords/API keys sitting in plaintext in history
+  dejsh flows             command sequences you repeat -> one-command macros
+  dejsh find <words...>   "what was that command?" — search by keywords
+  dejsh dig               your history as geological layers (-l layers, -w width)
 
-${B}needs the recorder${R} (hindsh hook --install — adds cwd, exit code, duration):
-  hindsh fix [--run]       the last command failed — what did you do about it before?
-  hindsh fixes             your personal troubleshooting memory
-  hindsh resume [--all]    where did I leave off in this project (or in all of them)?
-  hindsh slow              where your terminal time actually goes
-  hindsh script [-n N]     turn your last N successful commands into a runnable script
+${B}needs the recorder${R} (dejsh hook --install — adds cwd, exit code, duration):
+  dejsh fix [--run]       the last command failed — what did you do about it before?
+  dejsh fixes             your personal troubleshooting memory
+  dejsh resume [--all]    where did I leave off in this project (or in all of them)?
+  dejsh slow              where your terminal time actually goes
+  dejsh script [-n N]     turn your last N successful commands into a runnable script
 
 ${B}history only${R}:
-  hindsh danger            close calls: rm -rf, force-push, curl|sh ... with safer alternatives
-  hindsh coach             habits costing you time, and the one-line fix for each
-  hindsh wrapped           your terminal year as a shareable card
-  hindsh export            privacy-safe profile of the tools you use (no arguments, no paths)
-  hindsh compare FILE      what a teammate's profile uses that you've never touched
+  dejsh danger            close calls: rm -rf, force-push, curl|sh ... with safer alternatives
+  dejsh coach             habits costing you time, and the one-line fix for each
+  dejsh wrapped           your terminal year as a shareable card
+  dejsh export            privacy-safe profile of the tools you use (no arguments, no paths)
+  dejsh compare FILE      what a teammate's profile uses that you've never touched
 
 options: -f FILE (history file)  -n N (rows, default 10)  --raw (for >> ~/.zshrc)
          --json (alias typos flows leaks fixes find export doctor)  --run (with fix: offer to re-apply)
@@ -35,7 +35,7 @@ U
 }
 
 CMD=${1:-}
-case $CMD in dig|alias|typos|flows|leaks|find|doctor|hook|fixes|fix|resume|slow|script|danger|coach|wrapped|export|compare) shift;; help|-h|--help) usage; exit 0;; --version) echo "hindsh $VERSION"; exit 0;; *) CMD=doctor;; esac
+case $CMD in dig|alias|typos|flows|leaks|find|doctor|hook|fixes|fix|resume|slow|script|danger|coach|wrapped|export|compare) shift;; help|-h|--help) usage; exit 0;; --version) echo "dejsh $VERSION"; exit 0;; *) CMD=doctor;; esac
 WORDS=()
 while [ $# -gt 0 ]; do case $1 in
   -l) LAYERS=$2; shift 2;; -w) WIDTH=$2; shift 2;; -f) HFILE=$2; shift 2;; -n) TOPN=$2; shift 2;;
@@ -44,12 +44,12 @@ while [ $# -gt 0 ]; do case $1 in
 case $CMD in dig|doctor|alias|typos|flows|leaks|danger|coach|wrapped|export) [ -n "${WORDS[0]:-}" ] && [ -f "${WORDS[0]}" ] && HFILE=${WORDS[0]};; esac
 H=
 for f in "$HFILE" "${HISTFILE:-}" "$HOME/.zsh_history" "$HOME/.bash_history" "$HOME/.local/share/fish/fish_history"; do [ -n "$f" ] && [ -r "$f" ] && { H=$f; break; }; done
-case $CMD in hook|fix|fixes|resume|slow) ;; script) [ -s "${HINDSH_JOURNAL:-$HOME/.hindsh/journal.tsv}" ] || [ -n "$H" ] || { echo "hindsh: no history file found"; exit 1; };;
-  *) [ -n "$H" ] || { echo "hindsh: no history file found (try -f FILE)"; exit 1; };; esac
+case $CMD in hook|fix|fixes|resume|slow) ;; script) [ -s "${DEJSH_JOURNAL:-$HOME/.dejsh/journal.tsv}" ] || [ -n "$H" ] || { echo "dejsh: no history file found"; exit 1; };;
+  *) [ -n "$H" ] || { echo "dejsh: no history file found (try -f FILE)"; exit 1; };; esac
 
-# ts<TAB>full command. Understands zsh EXTENDED_HISTORY and bash HISTTIMEFORMAT; skips hindsh's own invocations.
+# ts<TAB>full command. Understands zsh EXTENDED_HISTORY and bash HISTTIMEFORMAT; skips dejsh's own invocations.
 load_full() { local hf=${1:-$H}; LC_ALL=C awk '
-  function emit(t,line){ gsub(/^[ \t]+|[ \t]+$/,"",line); if (line=="" || line ~ /^hindsh( |$)/) return; print t "\t" line }
+  function emit(t,line){ gsub(/^[ \t]+|[ \t]+$/,"",line); if (line=="" || line ~ /^dejsh( |$)/) return; print t "\t" line }
   /^#[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]+$/ { bt=substr($0,2); next }
   /^- cmd: / { pc=substr($0,8); gsub(/\\n/," ",pc); gsub(/\\\\/,"\\",pc); fish=1; next }
   fish && /^  when: [0-9]+$/ { emit(substr($0,9)+0,pc); pc=""; next }
@@ -119,7 +119,7 @@ _leaks_data() { LC_ALL=C awk -v Q="'" '
     shown=substr(line,1,p-1) "<" substr(v,1,3) "..." length(v) ">" substr(line,p+length(v)); if(length(shown)>100) shown=substr(shown,1,97) "..."
     print NR "\t" kind "\t" shown; return 1 }
   function pat(re,minlen,kind){ if(match(line,re)&&RLENGTH>=minlen&&rd(kind,substr(line,RSTART,RLENGTH))) return 1; return 0 }
-  { line=$0; sub(/^: [0-9]+:[0-9]+;/,"",line); sub(/^- cmd: /,"",line); if(line ~ /^hindsh( |$)/) next; lo=tolower(line)
+  { line=$0; sub(/^: [0-9]+:[0-9]+;/,"",line); sub(/^- cmd: /,"",line); if(line ~ /^dejsh( |$)/) next; lo=tolower(line)
     if(pat("(sk|rk)_live_[A-Za-z0-9]+",24,"Stripe live key")) next
     if(pat("AIza[0-9A-Za-z_-]+",39,"Google API key")) next
     if(pat("ASIA[0-9A-Z]+",20,"AWS temporary key")) next
@@ -182,7 +182,7 @@ tops=(); while IFS=$'\t' read -r k tot mn mx a b c f new ext; do
   tops[k]="$k|$tot|$mn|$mx|$a|$b|$c|$f|$new|$ext"; done <<<"$DIG"
 N=${#tops[@]}; TOTAL=0; for r in "${tops[@]}"; do t=${r#*|}; TOTAL=$((TOTAL+${t%%|*})); done
 
-printf '\n  \033[1mHINDSH\033[0m — %s commands, %d layers, source: %s\n\n' "$TOTAL" "$N" "$H"
+printf '\n  \033[1mDEJSH\033[0m — %s commands, %d layers, source: %s\n\n' "$TOTAL" "$N" "$H"
 printf '  \033[38;5;34m%s\033[0m  ← surface (today)\n' "$(printf '▀%.0s' $(seq 1 "$WIDTH"))"
 for ((k=N-1;k>=0;k--)); do
   IFS='|' read -r _ tot mn mx a b c f new ext <<<"${tops[k]}"
@@ -228,7 +228,7 @@ cmd_alias() {
   done < <(_alias_data)
   if [ $RAW -eq 0 ]; then
     [ $shown -eq 0 ] && echo "  Nothing worth aliasing yet (needs a command of 10+ chars typed 3+ times)." ||
-      printf '  %s≈ %s keystrokes (~%s min of typing) recovered.%s\n  Add them:  %shindsh alias --raw >> ~/.zshrc && source ~/.zshrc%s\n\n' "$B" "$total" "$((total/200+1))" "$R" "$CYN" "$R"
+      printf '  %s≈ %s keystrokes (~%s min of typing) recovered.%s\n  Add them:  %sdejsh alias --raw >> ~/.zshrc && source ~/.zshrc%s\n\n' "$B" "$total" "$((total/200+1))" "$R" "$CYN" "$R"
   fi
 }
 
@@ -243,7 +243,7 @@ cmd_typos() {
     else printf "  %s%s%s → %s  %s(typed %s×; you use %s %s×)%s\n    alias %s='%s'\n\n" "$RED" "$a" "$R" "$b" "$D" "$c" "$b" "$bn" "$R" "$a" "$b"; fi
     [ $shown -ge "$TOPN" ] && break
   done < <(_typos_data)
-  [ $RAW -eq 0 ] && { [ $shown -eq 0 ] && echo "  No recurring typos. Suspiciously good." || printf '  Fix them forever:  %shindsh typos --raw >> ~/.zshrc%s\n\n' "$CYN" "$R"; }
+  [ $RAW -eq 0 ] && { [ $shown -eq 0 ] && echo "  No recurring typos. Suspiciously good." || printf '  Fix them forever:  %sdejsh typos --raw >> ~/.zshrc%s\n\n' "$CYN" "$R"; }
 }
 
 cmd_flows() {
@@ -270,18 +270,18 @@ cmd_leaks() {
     [ "$shown" = "" ] && shown=0; shown=$((shown+1))
     [ $shown -le "$TOPN" ] && printf '  %sline %-5s%s %s%-18s%s %s\n' "$D" "$n" "$R" "$RED" "$kind" "$R" "$line"
   done < <(_leaks_data)
-  printf '\n  %s%s possible secret(s).%s Secrets are shown redacted; hindsh never prints them in full.\n' "$B" "$total" "$R"
+  printf '\n  %s%s possible secret(s).%s Secrets are shown redacted; dejsh never prints them in full.\n' "$B" "$total" "$R"
   printf '  %sRotate these credentials%s — deleting history does not un-leak anything already synced, backed up or screen-shared.\n' "$YEL" "$R"
-  if [ $SCRUB -eq 0 ]; then printf '  Remove the lines (backup kept):  %shindsh leaks --scrub%s\n\n' "$CYN" "$R"; return; fi
+  if [ $SCRUB -eq 0 ]; then printf '  Remove the lines (backup kept):  %sdejsh leaks --scrub%s\n\n' "$CYN" "$R"; return; fi
   [ -t 0 ] || { echo "  --scrub needs an interactive terminal to confirm."; exit 1; }
-  printf '\n  Delete %s line(s) from %s ? (backup: %s.hindsh-backup) [y/N] ' "$total" "$H" "$H"; read -r ans
+  printf '\n  Delete %s line(s) from %s ? (backup: %s.dejsh-backup) [y/N] ' "$total" "$H" "$H"; read -r ans
   [ "$ans" = y ] || { echo "  aborted."; return; }
-  cp -p "$H" "$H.hindsh-backup" && awk -v L=",$lines" 'index(L, "," NR ",")>0 { d=1; next } d && /^  when: [0-9]+$/ { d=0; next } { d=0; print }' "$H.hindsh-backup" > "$H.hindsh-tmp" && cat "$H.hindsh-tmp" > "$H" && rm -f "$H.hindsh-tmp"
+  cp -p "$H" "$H.dejsh-backup" && awk -v L=",$lines" 'index(L, "," NR ",")>0 { d=1; next } d && /^  when: [0-9]+$/ { d=0; next } { d=0; print }' "$H.dejsh-backup" > "$H.dejsh-tmp" && cat "$H.dejsh-tmp" > "$H" && rm -f "$H.dejsh-tmp"
   printf '  %s✓ scrubbed.%s Open a new shell (a running shell may write its in-memory history back on exit).\n\n' "$GRN" "$R"
 }
 
 cmd_find() {
-  [ ${#WORDS[@]} -eq 0 ] && { echo "usage: hindsh find <words...>   e.g. hindsh find docker prune"; exit 1; }
+  [ ${#WORDS[@]} -eq 0 ] && { echo "usage: dejsh find <words...>   e.g. dejsh find docker prune"; exit 1; }
   local o ts c cmd shown=0 rows
   rows=$(load_full | LC_ALL=C awk -F'\t' -v q="${WORDS[*]}" '
     BEGIN{ n=split(tolower(q),w," ") }
@@ -306,24 +306,24 @@ cmd_doctor() {
   na=$(_alias_data | cnt); sa=$(_alias_data | awk -F'\t' '{s+=$1} END{print s+0}')
   nt=0; while IFS=$'\t' read -r _ a _ _; do [ -n "$a" ] && ! command -v "$a" >/dev/null 2>&1 && nt=$((nt+1)); done < <(_typos_data)
   nl=$(_leaks_data | cnt); nf=$(_flows_data | cnt)
-  printf '\n  %sHINDSH CHECKUP%s — %s commands in %s\n\n' "$B" "$R" "$total" "$H"
-  printf '  ✂  %-8s %s%s repeated commands%s could be aliases (~%s keystrokes)   %s→ hindsh alias%s\n' ALIASES "$GRN" "$na" "$R" "$sa" "$CYN" "$R"
-  printf '  ✎  %-8s %s%s recurring typos%s                                       %s→ hindsh typos%s\n' TYPOS "$YEL" "$nt" "$R" "$CYN" "$R"
-  if [ "$nl" -gt 0 ]; then printf '  🔑 %-8s %s%s possible secret(s) in plaintext!%s                       %s→ hindsh leaks%s\n' SECRETS "$RED" "$nl" "$R" "$CYN" "$R"
-  else printf '  🔑 %-8s %sclean%s                                                    %s→ hindsh leaks%s\n' SECRETS "$GRN" "$R" "$CYN" "$R"; fi
-  printf '  ⛓  %-8s %s%s workflows%s you repeat could be one command             %s→ hindsh flows%s\n' FLOWS "$YEL" "$nf" "$R" "$CYN" "$R"
+  printf '\n  %sDEJSH CHECKUP%s — %s commands in %s\n\n' "$B" "$R" "$total" "$H"
+  printf '  ✂  %-8s %s%s repeated commands%s could be aliases (~%s keystrokes)   %s→ dejsh alias%s\n' ALIASES "$GRN" "$na" "$R" "$sa" "$CYN" "$R"
+  printf '  ✎  %-8s %s%s recurring typos%s                                       %s→ dejsh typos%s\n' TYPOS "$YEL" "$nt" "$R" "$CYN" "$R"
+  if [ "$nl" -gt 0 ]; then printf '  🔑 %-8s %s%s possible secret(s) in plaintext!%s                       %s→ dejsh leaks%s\n' SECRETS "$RED" "$nl" "$R" "$CYN" "$R"
+  else printf '  🔑 %-8s %sclean%s                                                    %s→ dejsh leaks%s\n' SECRETS "$GRN" "$R" "$CYN" "$R"; fi
+  printf '  ⛓  %-8s %s%s workflows%s you repeat could be one command             %s→ dejsh flows%s\n' FLOWS "$YEL" "$nf" "$R" "$CYN" "$R"
   local nd nc; nd=$(cmd_danger | grep -c '×'); nc=$(cmd_coach | grep -c '×')
-  printf '  ☢  %-8s %s%s risky command patterns%s in your history                 %s→ hindsh danger%s\n' DANGER "$YEL" "$nd" "$R" "$CYN" "$R"
-  printf '  🧭 %-8s %s%s habits%s costing you time                                %s→ hindsh coach%s\n' COACH "$YEL" "$nc" "$R" "$CYN" "$R"
-  if [ -s "$JOURNAL" ]; then printf '  🎙 %-8s %srecording%s (%s commands with cwd, exit code, duration)  %s→ hindsh fix · resume · slow%s\n' MEMORY "$GRN" "$R" "$(wc -l < "$JOURNAL" | tr -d ' ')" "$CYN" "$R"
-  else printf '  🎙 %-8s %snot recording%s: unlock fix / resume / slow / safe scripts  %s→ hindsh hook --install%s\n' MEMORY "$YEL" "$R" "$CYN" "$R"; fi
-  printf '  🔍 %-8s find any past command by keywords                      %s→ hindsh find <words>%s\n' RECALL "$CYN" "$R"
-  printf '  🪨 %-8s your history as rock layers                            %s→ hindsh dig%s\n\n' DIG "$CYN" "$R"
+  printf '  ☢  %-8s %s%s risky command patterns%s in your history                 %s→ dejsh danger%s\n' DANGER "$YEL" "$nd" "$R" "$CYN" "$R"
+  printf '  🧭 %-8s %s%s habits%s costing you time                                %s→ dejsh coach%s\n' COACH "$YEL" "$nc" "$R" "$CYN" "$R"
+  if [ -s "$JOURNAL" ]; then printf '  🎙 %-8s %srecording%s (%s commands with cwd, exit code, duration)  %s→ dejsh fix · resume · slow%s\n' MEMORY "$GRN" "$R" "$(wc -l < "$JOURNAL" | tr -d ' ')" "$CYN" "$R"
+  else printf '  🎙 %-8s %snot recording%s: unlock fix / resume / slow / safe scripts  %s→ dejsh hook --install%s\n' MEMORY "$YEL" "$R" "$CYN" "$R"; fi
+  printf '  🔍 %-8s find any past command by keywords                      %s→ dejsh find <words>%s\n' RECALL "$CYN" "$R"
+  printf '  🪨 %-8s your history as rock layers                            %s→ dejsh dig%s\n\n' DIG "$CYN" "$R"
 }
 
 
 # ======================= v0.3: memory, recovery, coaching =======================
-JOURNAL=${HINDSH_JOURNAL:-$HOME/.hindsh/journal.tsv}
+JOURNAL=${DEJSH_JOURNAL:-$HOME/.dejsh/journal.tsv}
 AWK_KEY='
 function ckey(l,  a,k,i,w,wi){ k=split(l,a,/[ \t]+/); w=""; wi=0
   for(i=1;i<=k;i++){ if(a[i] ~ /^[A-Za-z_][A-Za-z0-9_]*=/||a[i]=="sudo"||a[i]=="time"||a[i]=="command")continue; w=a[i]; wi=i; break }
@@ -337,60 +337,60 @@ TAB=$(printf '\t')
 rel() { local d=$(( $(date +%s) - $1 )); if [ $d -lt 120 ]; then echo "just now"; elif [ $d -lt 7200 ]; then echo "$((d/60)) min ago"; elif [ $d -lt 172800 ]; then echo "$((d/3600)) h ago"; else echo "$((d/86400)) days ago"; fi; }
 dur() { local s=$1; if [ "$s" -ge 3600 ]; then printf '%dh%02dm' $((s/3600)) $((s%3600/60)); elif [ "$s" -ge 60 ]; then printf '%dm%02ds' $((s/60)) $((s%60)); else printf '%ds' "$s"; fi; }
 load_journal() { [ -s "$JOURNAL" ] && cat "$JOURNAL"; }
-need_journal() { [ -s "$JOURNAL" ] || { printf '\n  %shindsh has no memory yet.%s History files do not record where a command ran, how long it took, or whether it failed.\n  Turn on the recorder (local only; commands that look like secrets are never written):\n\n      %shindsh hook --install%s\n\n  then open a new terminal and work normally.\n\n' "$B" "$R" "$CYN" "$R"; exit 1; }; }
+need_journal() { [ -s "$JOURNAL" ] || { printf '\n  %sdejsh has no memory yet.%s History files do not record where a command ran, how long it took, or whether it failed.\n  Turn on the recorder (local only; commands that look like secrets are never written):\n\n      %sdejsh hook --install%s\n\n  then open a new terminal and work normally.\n\n' "$B" "$R" "$CYN" "$R"; exit 1; }; }
 
 # ---------- hook: the black-box recorder ----------
 cmd_hook() {
   local sh=${WORDS[0]:-$(basename "${SHELL:-zsh}")} snippet rc
   case $sh in
   zsh) IFS= read -r -d '' snippet <<'Z' || true
-# >>> hindsh recorder (zsh) >>>
+# >>> dejsh recorder (zsh) >>>
 zmodload zsh/datetime 2>/dev/null
-mkdir -p -m 700 ~/.hindsh; [[ -e ~/.hindsh/journal.tsv ]] || { : > ~/.hindsh/journal.tsv; chmod 600 ~/.hindsh/journal.tsv; }
-_hindsh_preexec() { _HINDSH_CMD=$1; _HINDSH_T=$EPOCHSECONDS; }
-_hindsh_precmd() { local rc=$?; [[ -z $_HINDSH_CMD ]] && return; local c=${_HINDSH_CMD//$'\t'/ }; c=${c//$'\n'/ }; _HINDSH_CMD=
-  case ${c:l} in hindsh*|" "*|*token*|*secret*|*passw*|*apikey*|*api_key*|*bearer*|*akia*|*private\ key*) return;; esac
-  printf '%s\t%s\t%s\t%s\t%s\n' "$_HINDSH_T" "$rc" "$((EPOCHSECONDS-_HINDSH_T))" "$PWD" "$c" >> ~/.hindsh/journal.tsv; }
-autoload -Uz add-zsh-hook; add-zsh-hook preexec _hindsh_preexec; add-zsh-hook precmd _hindsh_precmd
-precmd_functions=(_hindsh_precmd ${precmd_functions:#_hindsh_precmd})
-# <<< hindsh recorder <<<
+mkdir -p -m 700 ~/.dejsh; [[ -e ~/.dejsh/journal.tsv ]] || { : > ~/.dejsh/journal.tsv; chmod 600 ~/.dejsh/journal.tsv; }
+_dejsh_preexec() { _DEJSH_CMD=$1; _DEJSH_T=$EPOCHSECONDS; }
+_dejsh_precmd() { local rc=$?; [[ -z $_DEJSH_CMD ]] && return; local c=${_DEJSH_CMD//$'\t'/ }; c=${c//$'\n'/ }; _DEJSH_CMD=
+  case ${c:l} in dejsh*|" "*|*token*|*secret*|*passw*|*apikey*|*api_key*|*bearer*|*akia*|*private\ key*) return;; esac
+  printf '%s\t%s\t%s\t%s\t%s\n' "$_DEJSH_T" "$rc" "$((EPOCHSECONDS-_DEJSH_T))" "$PWD" "$c" >> ~/.dejsh/journal.tsv; }
+autoload -Uz add-zsh-hook; add-zsh-hook preexec _dejsh_preexec; add-zsh-hook precmd _dejsh_precmd
+precmd_functions=(_dejsh_precmd ${precmd_functions:#_dejsh_precmd})
+# <<< dejsh recorder <<<
 Z
 ;;
   bash) IFS= read -r -d '' snippet <<'Z' || true
-# >>> hindsh recorder (bash) >>>
-mkdir -p -m 700 ~/.hindsh; [ -e ~/.hindsh/journal.tsv ] || { : > ~/.hindsh/journal.tsv; chmod 600 ~/.hindsh/journal.tsv; }
-_hindsh_debug() { [ "$BASH_COMMAND" = _hindsh_post ] && return; [ -z "$_HINDSH_ARM" ] && { _HINDSH_ARM=1; _HINDSH_S=$SECONDS; _HINDSH_T=$(date +%s); }; }
-_hindsh_post() { local rc=$? c hn; [ -z "$_HINDSH_ARM" ] && return $rc; _HINDSH_ARM=
-  c=$(HISTTIMEFORMAT= history 1); hn=${c%%[!0-9 ]*}; hn=${hn// /}; [ "$hn" = "$_HINDSH_HN" ] && return $rc; _HINDSH_HN=$hn
+# >>> dejsh recorder (bash) >>>
+mkdir -p -m 700 ~/.dejsh; [ -e ~/.dejsh/journal.tsv ] || { : > ~/.dejsh/journal.tsv; chmod 600 ~/.dejsh/journal.tsv; }
+_dejsh_debug() { [ "$BASH_COMMAND" = _dejsh_post ] && return; [ -z "$_DEJSH_ARM" ] && { _DEJSH_ARM=1; _DEJSH_S=$SECONDS; _DEJSH_T=$(date +%s); }; }
+_dejsh_post() { local rc=$? c hn; [ -z "$_DEJSH_ARM" ] && return $rc; _DEJSH_ARM=
+  c=$(HISTTIMEFORMAT= history 1); hn=${c%%[!0-9 ]*}; hn=${hn// /}; [ "$hn" = "$_DEJSH_HN" ] && return $rc; _DEJSH_HN=$hn
   c=$(printf '%s' "$c" | sed 's/^ *[0-9]* *//' | tr '\t\n' '  ')
-  case $(printf '%s' "$c" | tr 'A-Z' 'a-z') in hindsh*|" "*|*token*|*secret*|*passw*|*apikey*|*api_key*|*bearer*|*akia*|*private\ key*) return $rc;; esac
-  printf '%s\t%s\t%s\t%s\t%s\n' "$_HINDSH_T" "$rc" "$((SECONDS-_HINDSH_S))" "$PWD" "$c" >> ~/.hindsh/journal.tsv; return $rc; }
-trap '_hindsh_debug' DEBUG; PROMPT_COMMAND="_hindsh_post${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
-# <<< hindsh recorder <<<
+  case $(printf '%s' "$c" | tr 'A-Z' 'a-z') in dejsh*|" "*|*token*|*secret*|*passw*|*apikey*|*api_key*|*bearer*|*akia*|*private\ key*) return $rc;; esac
+  printf '%s\t%s\t%s\t%s\t%s\n' "$_DEJSH_T" "$rc" "$((SECONDS-_DEJSH_S))" "$PWD" "$c" >> ~/.dejsh/journal.tsv; return $rc; }
+trap '_dejsh_debug' DEBUG; PROMPT_COMMAND="_dejsh_post${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
+# <<< dejsh recorder <<<
 Z
 ;;
   fish) IFS= read -r -d '' snippet <<'Z' || true
-# >>> hindsh recorder (fish) >>>
-mkdir -p ~/.hindsh; chmod 700 ~/.hindsh
-test -e ~/.hindsh/journal.tsv; or begin; touch ~/.hindsh/journal.tsv; chmod 600 ~/.hindsh/journal.tsv; end
-function _hindsh_record --on-event fish_postexec
+# >>> dejsh recorder (fish) >>>
+mkdir -p ~/.dejsh; chmod 700 ~/.dejsh
+test -e ~/.dejsh/journal.tsv; or begin; touch ~/.dejsh/journal.tsv; chmod 600 ~/.dejsh/journal.tsv; end
+function _dejsh_record --on-event fish_postexec
     set -l rc $status
     set -l c (string join ' ' -- $argv | string replace -a \t ' ')
     set -l lc (string lower -- $c)
-    string match -qr '^(hindsh| )|token|secret|passw|apikey|api_key|bearer|akia|private key' -- $lc; and return
+    string match -qr '^(dejsh| )|token|secret|passw|apikey|api_key|bearer|akia|private key' -- $lc; and return
     set -l d (math -s0 "$CMD_DURATION / 1000")
-    printf '%s\t%s\t%s\t%s\t%s\n' (math (date +%s) - $d) $rc $d $PWD $c >> ~/.hindsh/journal.tsv
+    printf '%s\t%s\t%s\t%s\t%s\n' (math (date +%s) - $d) $rc $d $PWD $c >> ~/.dejsh/journal.tsv
 end
-# <<< hindsh recorder <<<
+# <<< dejsh recorder <<<
 Z
 ;;
-  *) echo "usage: hindsh hook [zsh|bash|fish] [--install]"; exit 1;; esac
+  *) echo "usage: dejsh hook [zsh|bash|fish] [--install]"; exit 1;; esac
   if [ $INSTALL -eq 0 ]; then printf '%s\n' "$snippet"; return; fi
   case $sh in fish) rc=$HOME/.config/fish/config.fish; mkdir -p "$HOME/.config/fish";; *) rc=$HOME/.${sh}rc;; esac
-  if grep -qs 'hindsh recorder' "$rc"; then printf '  recorder already installed in %s\n' "$rc"; return; fi
-  command -v hindsh >/dev/null 2>&1 || printf '  %snote:%s `hindsh` is not on your PATH yet, so `hindsh hook` calls will not work in new shells until it is.\n' "$YEL" "$R"
+  if grep -qs 'dejsh recorder' "$rc"; then printf '  recorder already installed in %s\n' "$rc"; return; fi
+  command -v dejsh >/dev/null 2>&1 || printf '  %snote:%s `dejsh` is not on your PATH yet, so `dejsh hook` calls will not work in new shells until it is.\n' "$YEL" "$R"
   printf '\n%s\n' "$snippet" >> "$rc"
-  printf '\n  %s✓ recorder added to %s%s\n  Open a new terminal. It stores epoch, exit code, duration, directory and command in %s (mode 600).\n  Commands containing token/secret/password/key words, or starting with a space, are never recorded.\n  Remove it any time: delete the block between the "hindsh recorder" markers.\n\n' "$GRN" "$rc" "$R" "$JOURNAL"
+  printf '\n  %s✓ recorder added to %s%s\n  Open a new terminal. It stores epoch, exit code, duration, directory and command in %s (mode 600).\n  Commands containing token/secret/password/key words, or starting with a space, are never recorded.\n  Remove it any time: delete the block between the "dejsh recorder" markers.\n\n' "$GRN" "$rc" "$R" "$JOURNAL"
 }
 
 # ---------- fixes: learn how YOU fix things ----------
@@ -418,7 +418,7 @@ cmd_fixes() {
     [ $shown -ge "$TOPN" ] && break
   done < <(_fixes_data)
   [ $shown -eq 0 ] && echo "  Nothing has failed twice yet. Keep the recorder on; this fills in as you work."
-  printf '  Right after a failure, run %shindsh fix%s.\n\n' "$CYN" "$R"
+  printf '  Right after a failure, run %sdejsh fix%s.\n\n' "$CYN" "$R"
 }
 
 cmd_fix() {
@@ -432,7 +432,7 @@ cmd_fix() {
   row=$(_fixes_data | awk -F'\t' -v k="$key" '$2==k && $3!="-"{print; exit}')
   if [ -n "$row" ]; then IFS=$'\t' read -r nf _ fix fc <<<"$row"
     printf '  Last time `%s` failed, you ran:\n    %s%s%s   %s(worked %s of %s times)%s\n\n' "$key" "$GRN" "$fix" "$R" "$D" "$fc" "$nf" "$R"
-  else printf '  No learned fix for `%s` yet. Once you fix it, hindsh remembers how.\n\n' "$key"; fi
+  else printf '  No learned fix for `%s` yet. Once you fix it, dejsh remembers how.\n\n' "$key"; fi
   if [ $RUN -eq 1 ] && [ -n "$row" ]; then
     case $fix in "("*) echo "  Nothing to apply: the remembered fix is simply re-running the command."; return;;
       *" ; "*) echo "  --run only applies fixes that are a single command (this one is a sequence)."; return;; esac
@@ -451,13 +451,13 @@ cmd_resume() {
     while IFS=$'\t' read -r ts n d c; do printf '  %s%-13s%s %s%-34s%s %s%4s cmds%s  last: %s\n' "$D" "$(rel "$ts")" "$R" "$B" "${d/#$HOME/~}" "$R" "$D" "$n" "$R" "${c:0:40}"; done
     echo; return; fi
   rows=$(load_journal | awk -F'\t' -v d="$dir" '$4==d{n++;T[n]=$1;RC[n]=$2;C[n]=$5} END{ if(!n)exit 1; s=n; while(s>1&&T[s]-T[s-1]<=1800)s--; for(i=s;i<=n;i++)print T[i]"\t"RC[i]"\t"C[i] }') ||
-    { printf '\n  hindsh has no recorded commands in %s. Try %shindsh resume --all%s\n\n' "${dir/#$HOME/~}" "$CYN" "$R"; exit 1; }
+    { printf '\n  dejsh has no recorded commands in %s. Try %sdejsh resume --all%s\n\n' "${dir/#$HOME/~}" "$CYN" "$R"; exit 1; }
   n=$(printf '%s\n' "$rows" | cnt); first=$(printf '%s\n' "$rows" | head -1 | cut -f1); last=$(printf '%s\n' "$rows" | tail -1 | cut -f1)
   printf '\n  %sWHERE YOU LEFT OFF%s in %s%s%s\n  %slast session %s · %s commands over %s%s\n\n' "$B" "$R" "$B" "${dir/#$HOME/~}" "$R" "$D" "$(rel "$last")" "$n" "$(dur $((last-first)))" "$R"
   printf '%s\n' "$rows" | grep -v "^[0-9]*${TAB}[0-9]*${TAB}\(ls\|pwd\|clear\)\( \|\$\)" | tail -n 8 | while IFS=$'\t' read -r ts rc c; do
     if [ "$rc" = 0 ]; then printf '   %s✓%s %s\n' "$GRN" "$R" "${c:0:70}"; else printf '   %s✗%s %s %s(exit %s)%s\n' "$RED" "$R" "${c:0:60}" "$D" "$rc" "$R"; fi; done
   failed=$(printf '%s\n' "$rows" | tail -1 | awk -F'\t' '$2!=0&&$2!=130{print $3}')
-  [ -n "$failed" ] && printf '\n  %s⚠ you stopped on a failing command:%s %s\n    try %shindsh fix%s\n' "$YEL" "$R" "$failed" "$CYN" "$R"
+  [ -n "$failed" ] && printf '\n  %s⚠ you stopped on a failing command:%s %s\n    try %sdejsh fix%s\n' "$YEL" "$R" "$failed" "$CYN" "$R"
   if git -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
     branch=$(git -C "$dir" rev-parse --abbrev-ref HEAD 2>/dev/null); dirty=$(git -C "$dir" status --porcelain 2>/dev/null | wc -l | tr -d ' ')
     printf '\n  git: on %s%s%s, %s uncommitted change(s)\n' "$B" "$branch" "$R" "$dirty"
@@ -479,15 +479,15 @@ cmd_script() {
   { if [ $mode = journal ]; then load_journal; else load_full | awk -F'\t' '{print $1 "\t0\t0\t\t" $2}'; fi; } | LC_ALL=C awk -F'\t' -v N="$TOPN" -v since="$SINCE" -v now="$now" -v mode=$mode "$AWK_KEY"'
     { ts=$1+0; rc=$2+0; cwd=$4; cmd=$5
       if(mode=="journal"&&rc!=0) next; if(since>0&&ts>0&&ts<now-since) next
-      k=ckey(cmd); if(k==""||k=="ls"||k=="pwd"||k=="clear"||k=="history"||k=="hindsh"||k=="exit"||k=="man") next
+      k=ckey(cmd); if(k==""||k=="ls"||k=="pwd"||k=="clear"||k=="history"||k=="dejsh"||k=="exit"||k=="man") next
       if(cmd==prev) next; prev=cmd; m++; C[m]=cmd; W[m]=cwd }
-    END{ s=m-N+1; if(s<1)s=1; if(m==0){ print "# hindsh: no commands matched" > "/dev/stderr"; exit 1 }
-      print "#!/usr/bin/env bash"; printf "# generated by hindsh from %d command(s)\n", m-s+1
-      if(mode!="journal") print "# NOTE: plain history has no exit codes, so failed commands may be included. Run `hindsh hook --install` for success-only scripts."
+    END{ s=m-N+1; if(s<1)s=1; if(m==0){ print "# dejsh: no commands matched" > "/dev/stderr"; exit 1 }
+      print "#!/usr/bin/env bash"; printf "# generated by dejsh from %d command(s)\n", m-s+1
+      if(mode!="journal") print "# NOTE: plain history has no exit codes, so failed commands may be included. Run `dejsh hook --install` for success-only scripts."
       print "set -euo pipefail"; print ""
       if(mode=="journal"&&W[s]!="") { q=W[s]; gsub(/"/,"\\\"",q); print "cd \"" q "\"" }
       for(i=s;i<=m;i++){ lo=tolower(C[i])
-        if(lo ~ /(token|secret|passw|api_?key|bearer|akia|sk-|private key)/) print "# [hindsh] skipped: looks like it contains a secret"
+        if(lo ~ /(token|secret|passw|api_?key|bearer|akia|sk-|private key)/) print "# [dejsh] skipped: looks like it contains a secret"
         else print C[i] } }'
 }
 
@@ -525,7 +525,7 @@ cmd_coach() {
     BEGIN{ i=0
       r[++i]="^cd +(\\.\\.\\/?)+$"; m[i]=8; t[i]="cd .. chains"; p[i]="alias ..='"'"'cd ..'"'"' ...='"'"'cd ../..'"'"'; or zsh `setopt AUTO_CD` so `..` just works"
       r[++i]="^cat +[^|<>]+\\|[ ]*(grep|head|tail|wc|awk|sed)"; m[i]=4; t[i]="cat file | grep"; p[i]="skip the cat: `grep pattern file`, `head file`, `wc -l < file`"
-      r[++i]="^history *\\|[ ]*grep"; m[i]=3; t[i]="history | grep"; p[i]="`hindsh find words`, or Ctrl-R for interactive search"
+      r[++i]="^history *\\|[ ]*grep"; m[i]=3; t[i]="history | grep"; p[i]="`dejsh find words`, or Ctrl-R for interactive search"
       r[++i]="^git +checkout +-b"; m[i]=4; t[i]="git checkout -b"; p[i]="`git switch -c name` is clearer and harder to misuse"
       r[++i]="ps +(aux|-ef) *\\|[ ]*grep"; m[i]=3; t[i]="ps | grep"; p[i]="`pgrep -fl name` (and `pkill -f name`)"
       r[++i]="^clear$"; m[i]=15; t[i]="typing clear"; p[i]="Ctrl-L clears the screen, no typing"
@@ -587,7 +587,7 @@ _keys_data() { local f=${1:-$H}
   load_full "$f" | LC_ALL=C awk -F'\t' "$AWK_KEY"'{ l=$0; sub(/^[^\t]*\t/,"",l); k=ckey(l); if(k!=""&&!triv(k)) n[k]++ } END{ for(k in n) if(n[k]>=2) printf "%s\t%d\n", k, n[k] }' | sort -t"$TAB" -k2,2 -rn; }
 cmd_export() { if [ $JSON -eq 1 ]; then _keys_data | json_rows 'tool,#count'; else _keys_data; fi; }
 cmd_compare() {
-  local other=${WORDS[0]:-}; [ -r "$other" ] || { echo "usage: hindsh compare THEIR_PROFILE   (they run: hindsh export > profile.tsv)"; exit 1; }
+  local other=${WORDS[0]:-}; [ -r "$other" ] || { echo "usage: dejsh compare THEIR_PROFILE   (they run: dejsh export > profile.tsv)"; exit 1; }
   local mine theirs; mine=$(mktemp); theirs=$(mktemp); _keys_data "$H" > "$mine"; _keys_data "$other" > "$theirs"
   printf '\n  %sTHEY USE, YOU NEVER HAVE%s\n\n' "$B" "$R"
   awk -F'\t' 'NR==FNR{m[$1]=1; next} !($1 in m){printf "  %s%-22s%s %s%s× for them%s\n", "'"$B"'", $1, "'"$R"'", "'"$D"'", $2, "'"$R"'"}' "$mine" "$theirs" | head -n "$TOPN"
