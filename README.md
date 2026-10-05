@@ -1,8 +1,10 @@
 # strata
 
-**Your shell history knows what's wrong with your workflow. strata tells you, and fixes it.**
+**Your shell has a memory problem. strata gives it a memory, then uses it to fix things.**
 
 You've typed `git push origin main` hundreds of times. You've typo'd `git` as `gti` every week for a year. Somewhere in your history there may be an API key you pasted once and forgot. strata reads the history file you already have, finds these problems, and hands you the fix.
+
+Plain history can't tell you where a command ran, how long it took, or whether it failed. strata can record that locally (opt-in), and builds on it: it learns how *you* fix errors, shows where you left off in a project, and writes scripts from what you just did.
 
 One bash script. No dependencies, no network, nothing written unless you ask. Works with zsh and bash on macOS and Linux.
 
@@ -98,6 +100,56 @@ All words must match, in any order. `strata find --raw docker prune` prints just
 
 Your history sliced into layers (oldest at the bedrock), each named for its dominant command (`git` → *The Version Age*, `docker` → *The Container Era*), with commands used heavily in one layer only embedded as `☠` fossils. `-l 12` sets the layer count and `-w 90` the width.
 
+## The memory layer (opt-in recorder)
+
+```sh
+strata hook --install      # adds a small hook to ~/.zshrc or ~/.bashrc, then open a new terminal
+```
+
+The hook appends one line per command (time, exit code, duration, directory, command) to `~/.strata/journal.tsv`, mode 600, local only. Commands containing `token`, `secret`, `password`, `key` words, or starting with a space are never recorded. With it on:
+
+| You have this problem | Run | What you get |
+|---|---|---|
+| A command just failed and you know you've fixed this before | `strata fix` | The last failure, and what you ran last time it failed that way ("`npm start` failed → you ran `npm install`, worked 5 of 5 times"). |
+| You can't remember how you usually fix things | `strata fixes` | Your personal troubleshooting memory: each recurring failure and the fix that worked. It also spots flaky commands (fixed by just re-running). |
+| You come back to a project after a few days | `strata resume` | Your last session there: the commands, the step you stopped on (and if it failed), the git branch and uncommitted changes. `--all` lists every project by recency. |
+| "What did I just do that worked? I need to repeat it." | `strata script -n 8` | The last 8 *successful* commands as a runnable `set -euo pipefail` script, starting in the right directory. Secret-looking lines are skipped. `--since 30m` limits it by time. |
+| Your builds feel slow but you don't know why | `strata slow` | Time sinks ranked by total time, with average and worst case. |
+
+```console
+$ strata fix
+
+  last failure (2 min ago, in ~/projects/shopify)
+    ✗ npm start  (exit code 1)
+
+  Last time `npm start` failed, you ran:
+    npm install   (worked 5 of 5 times)
+```
+
+```console
+$ strata resume
+
+  WHERE YOU LEFT OFF in ~/projects/strata
+  last session 2 h ago · 6 commands over 43s
+
+   ✓ git status
+   ✓ shellcheck strata
+   ✓ git commit -m docs
+   ✗ git push origin main (exit 1)
+
+  ⚠ you stopped on a failing command: git push origin main
+  git: on main, 1 uncommitted change(s)
+```
+
+## Works from history alone
+
+| You have this problem | Run | What you get |
+|---|---|---|
+| You've run something scary and got lucky | `strata danger` | Close calls (`rm -rf ~`, `git push --force`, `curl \| sh`, `DROP TABLE`, `kubectl delete`...) with the safer alternative for each. |
+| Small habits quietly waste your day | `strata coach` | `cd ../..` chains, `cat \| grep`, `ps \| grep`, repeated `clear`, long `cd` paths... each with the one-line fix. |
+| You want to share your terminal year | `strata wrapped` | A shareable card: commands, top tools, your personality ("The Git Gardener"), your hourly rhythm, longest streak. |
+| A new teammate asks "what tools do you use?" | `strata export > me.tsv` then `strata compare theirs.tsv` | A privacy-safe profile (tool names and counts only, no arguments or paths), and a diff: what they use that you've never touched, and the reverse. |
+
 ## Install
 
 **One-liner** (installs to `~/.local/bin`):
@@ -137,13 +189,13 @@ Without timestamps everything still works; flows just can't filter by time gap, 
 ## Honest limits
 
 - strata sees what your history file recorded. Shells that don't save history, or a very short history, give thin results.
-- History has no exit codes or working directories, so strata can't know which commands failed or where they ran.
+- Plain history has no exit codes or working directories. `fix`, `fixes`, `resume`, `slow` and success-only `script` need the recorder, and only know about commands run after you install it.
 - `leaks` is pattern-based. It will miss secrets with no recognisable shape and may flag harmless values. Treat it as a smoke detector, not an audit.
 - Typo detection compares command names to your frequently used ones; it skips anything that exists on your `PATH`.
 
 ## Privacy
 
-Everything runs locally. strata reads your history file and prints to your terminal. It makes no network requests, and the only thing it ever writes is the history file during `leaks --scrub` (plus the backup next to it).
+Everything runs locally. strata reads your history and prints to your terminal. It makes no network requests. It only writes: the history file during `leaks --scrub` (plus a backup), and `~/.strata/journal.tsv` if you install the recorder. `strata export` shares tool names and counts only, never arguments.
 
 ## Requirements
 

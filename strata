@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # strata — your shell history, audited: aliases, typos, leaked secrets, repeated workflows, recall.
 VERSION=0.2.0
-LAYERS=8; WIDTH=64; TOPN=10; RAW=0; SCRUB=0; HFILE=${STRATA_HIST:-}
+LAYERS=8; WIDTH=64; TOPN=10; RAW=0; SCRUB=0; ALL=0; INSTALL=0; SINCE=0; HFILE=${STRATA_HIST:-}
 B=$'\033[1m'; D=$'\033[2m'; R=$'\033[0m'; GRN=$'\033[32m'; YEL=$'\033[33m'; RED=$'\033[31m'; CYN=$'\033[36m'
 
 usage() { cat <<U
@@ -15,29 +15,45 @@ ${B}strata${R} $VERSION — find what's fixable in your shell history
   strata find <words...>   "what was that command?" — search by keywords
   strata dig               your history as geological layers (-l layers, -w width)
 
+${B}needs the recorder${R} (strata hook --install — adds cwd, exit code, duration):
+  strata fix               the last command failed — what did you do about it before?
+  strata fixes             your personal troubleshooting memory
+  strata resume [--all]    where did I leave off in this project (or in all of them)?
+  strata slow              where your terminal time actually goes
+  strata script [-n N]     turn your last N successful commands into a runnable script
+
+${B}history only${R}:
+  strata danger            close calls: rm -rf, force-push, curl|sh ... with safer alternatives
+  strata coach             habits costing you time, and the one-line fix for each
+  strata wrapped           your terminal year as a shareable card
+  strata export            privacy-safe profile of the tools you use (no arguments, no paths)
+  strata compare FILE      what a teammate's profile uses that you've never touched
+
 options: -f FILE (history file)  -n N (rows, default 10)  --raw (machine output, for >> ~/.zshrc)
 U
 }
 
 CMD=${1:-}
-case $CMD in dig|alias|typos|flows|leaks|find|doctor) shift;; help|-h|--help) usage; exit 0;; --version) echo "strata $VERSION"; exit 0;; *) CMD=doctor;; esac
+case $CMD in dig|alias|typos|flows|leaks|find|doctor|hook|fixes|fix|resume|slow|script|danger|coach|wrapped|export|compare) shift;; help|-h|--help) usage; exit 0;; --version) echo "strata $VERSION"; exit 0;; *) CMD=doctor;; esac
 WORDS=()
 while [ $# -gt 0 ]; do case $1 in
   -l) LAYERS=$2; shift 2;; -w) WIDTH=$2; shift 2;; -f) HFILE=$2; shift 2;; -n) TOPN=$2; shift 2;;
-  --raw) RAW=1; shift;; --scrub) SCRUB=1; shift;; -h|--help) usage; exit 0;; *) WORDS+=("$1"); shift;; esac; done
-[ "$CMD" != find ] && [ -n "${WORDS[0]:-}" ] && [ -r "${WORDS[0]}" ] && HFILE=${WORDS[0]}
+  --raw) RAW=1; shift;; --scrub) SCRUB=1; shift;; --all) ALL=1; shift;; --install) INSTALL=1; shift;;
+  --since) v=$2; shift 2; nu=${v%[mhd]}; case ${v#$nu} in m) SINCE=$((nu*60));; h) SINCE=$((nu*3600));; d) SINCE=$((nu*86400));; *) SINCE=$((nu*60));; esac;; -h|--help) usage; exit 0;; *) WORDS+=("$1"); shift;; esac; done
+case $CMD in dig|doctor|alias|typos|flows|leaks|danger|coach|wrapped|export) [ -n "${WORDS[0]:-}" ] && [ -f "${WORDS[0]}" ] && HFILE=${WORDS[0]};; esac
 H=
 for f in "$HFILE" "${HISTFILE:-}" "$HOME/.zsh_history" "$HOME/.bash_history"; do [ -n "$f" ] && [ -r "$f" ] && { H=$f; break; }; done
-[ -n "$H" ] || { echo "strata: no history file found (try -f FILE)"; exit 1; }
+case $CMD in hook|fix|fixes|resume|slow) ;; script) [ -s "${STRATA_JOURNAL:-$HOME/.strata/journal.tsv}" ] || [ -n "$H" ] || { echo "strata: no history file found"; exit 1; };;
+  *) [ -n "$H" ] || { echo "strata: no history file found (try -f FILE)"; exit 1; };; esac
 
 # ts<TAB>full command. Understands zsh EXTENDED_HISTORY and bash HISTTIMEFORMAT; skips strata's own invocations.
-load_full() { LC_ALL=C awk '
+load_full() { local hf=${1:-$H}; LC_ALL=C awk '
   /^#[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]+$/ { bt=substr($0,2); next }
   { t=0; line=$0
     if (line ~ /^: [0-9]+:[0-9]+;/) { t=substr(line,3); sub(/:.*/,"",t); sub(/^: [0-9]+:[0-9]+;/,"",line) }
     else if (bt!="") { t=bt; bt="" }
     gsub(/^[ \t]+|[ \t]+$/,"",line); if (line=="" || line ~ /^strata( |$)/) next
-    print t "\t" line }' "$H"; }
+    print t "\t" line }' "$hf"; }
 
 q="'"
 esc() { printf %s "${1//$q/$q\\$q$q}"; }
@@ -267,8 +283,268 @@ cmd_doctor() {
   if [ "$nl" -gt 0 ]; then printf '  🔑 %-8s %s%s possible secret(s) in plaintext!%s                       %s→ strata leaks%s\n' SECRETS "$RED" "$nl" "$R" "$CYN" "$R"
   else printf '  🔑 %-8s %sclean%s                                                    %s→ strata leaks%s\n' SECRETS "$GRN" "$R" "$CYN" "$R"; fi
   printf '  ⛓  %-8s %s%s workflows%s you repeat could be one command             %s→ strata flows%s\n' FLOWS "$YEL" "$nf" "$R" "$CYN" "$R"
+  local nd nc; nd=$(cmd_danger | grep -c '×'); nc=$(cmd_coach | grep -c '×')
+  printf '  ☢  %-8s %s%s risky command patterns%s in your history                 %s→ strata danger%s\n' DANGER "$YEL" "$nd" "$R" "$CYN" "$R"
+  printf '  🧭 %-8s %s%s habits%s costing you time                                %s→ strata coach%s\n' COACH "$YEL" "$nc" "$R" "$CYN" "$R"
+  if [ -s "$JOURNAL" ]; then printf '  🎙 %-8s %srecording%s (%s commands with cwd, exit code, duration)  %s→ strata fix · resume · slow%s\n' MEMORY "$GRN" "$R" "$(wc -l < "$JOURNAL" | tr -d ' ')" "$CYN" "$R"
+  else printf '  🎙 %-8s %snot recording%s: unlock fix / resume / slow / safe scripts  %s→ strata hook --install%s\n' MEMORY "$YEL" "$R" "$CYN" "$R"; fi
   printf '  🔍 %-8s find any past command by keywords                      %s→ strata find <words>%s\n' RECALL "$CYN" "$R"
   printf '  🪨 %-8s your history as rock layers                            %s→ strata dig%s\n\n' DIG "$CYN" "$R"
 }
 
-case $CMD in dig) cmd_dig;; alias) cmd_alias;; typos) cmd_typos;; flows) cmd_flows;; leaks) cmd_leaks;; find) cmd_find;; doctor) cmd_doctor;; esac
+
+# ======================= v0.3: memory, recovery, coaching =======================
+JOURNAL=${STRATA_JOURNAL:-$HOME/.strata/journal.tsv}
+AWK_KEY='
+function ckey(l,  a,k,i,w,wi){ k=split(l,a,/[ \t]+/); w=""; wi=0
+  for(i=1;i<=k;i++){ if(a[i] ~ /^[A-Za-z_][A-Za-z0-9_]*=/||a[i]=="sudo"||a[i]=="time"||a[i]=="command")continue; w=a[i]; wi=i; break }
+  sub(/.*\//,"",w); if(w==""||w ~ /^[^A-Za-z0-9]/||w ~ /^[0-9.]+$/) return ""
+  if(!SUBINIT){ split("git docker npm yarn pnpm cargo kubectl brew make go pip pip3 gh terraform systemctl composer bundle rails",sb," "); for(i in sb)SUBS[sb[i]]=1; SUBINIT=1 }
+  if((w in SUBS)&&wi<k&&a[wi+1] ~ /^[a-z][a-z0-9:_-]*$/&&length(a[wi+1])<=14) return w " " a[wi+1]
+  return w }
+function triv(k){ return (k=="ls"||k=="cd"||k=="pwd"||k=="clear"||k=="cat"||k=="echo"||k=="open"||k=="exit"||k=="history"||k=="man"||k=="which"||k=="less"||k=="ll"||k=="la") }
+'
+TAB=$(printf '\t')
+rel() { local d=$(( $(date +%s) - $1 )); if [ $d -lt 120 ]; then echo "just now"; elif [ $d -lt 7200 ]; then echo "$((d/60)) min ago"; elif [ $d -lt 172800 ]; then echo "$((d/3600)) h ago"; else echo "$((d/86400)) days ago"; fi; }
+dur() { local s=$1; if [ "$s" -ge 3600 ]; then printf '%dh%02dm' $((s/3600)) $((s%3600/60)); elif [ "$s" -ge 60 ]; then printf '%dm%02ds' $((s/60)) $((s%60)); else printf '%ds' "$s"; fi; }
+load_journal() { [ -s "$JOURNAL" ] && cat "$JOURNAL"; }
+need_journal() { [ -s "$JOURNAL" ] || { printf '\n  %sstrata has no memory yet.%s History files do not record where a command ran, how long it took, or whether it failed.\n  Turn on the recorder (local only; commands that look like secrets are never written):\n\n      %sstrata hook --install%s\n\n  then open a new terminal and work normally.\n\n' "$B" "$R" "$CYN" "$R"; exit 1; }; }
+
+# ---------- hook: the black-box recorder ----------
+cmd_hook() {
+  local sh=${WORDS[0]:-$(basename "${SHELL:-zsh}")} snippet rc
+  case $sh in
+  zsh) IFS= read -r -d '' snippet <<'Z' || true
+# >>> strata recorder (zsh) >>>
+zmodload zsh/datetime 2>/dev/null
+mkdir -p -m 700 ~/.strata; [[ -e ~/.strata/journal.tsv ]] || { : > ~/.strata/journal.tsv; chmod 600 ~/.strata/journal.tsv; }
+_strata_preexec() { _STRATA_CMD=$1; _STRATA_T=$EPOCHSECONDS; }
+_strata_precmd() { local rc=$?; [[ -z $_STRATA_CMD ]] && return; local c=${_STRATA_CMD//$'\t'/ }; c=${c//$'\n'/ }; _STRATA_CMD=
+  case ${c:l} in strata*|" "*|*token*|*secret*|*passw*|*apikey*|*api_key*|*bearer*|*akia*|*private\ key*) return;; esac
+  printf '%s\t%s\t%s\t%s\t%s\n' "$_STRATA_T" "$rc" "$((EPOCHSECONDS-_STRATA_T))" "$PWD" "$c" >> ~/.strata/journal.tsv; }
+autoload -Uz add-zsh-hook; add-zsh-hook preexec _strata_preexec; add-zsh-hook precmd _strata_precmd
+precmd_functions=(_strata_precmd ${precmd_functions:#_strata_precmd})
+# <<< strata recorder <<<
+Z
+;;
+  bash) IFS= read -r -d '' snippet <<'Z' || true
+# >>> strata recorder (bash) >>>
+mkdir -p -m 700 ~/.strata; [ -e ~/.strata/journal.tsv ] || { : > ~/.strata/journal.tsv; chmod 600 ~/.strata/journal.tsv; }
+_strata_debug() { [ "$BASH_COMMAND" = _strata_post ] && return; [ -z "$_STRATA_ARM" ] && { _STRATA_ARM=1; _STRATA_S=$SECONDS; _STRATA_T=$(date +%s); }; }
+_strata_post() { local rc=$? c hn; [ -z "$_STRATA_ARM" ] && return $rc; _STRATA_ARM=
+  c=$(HISTTIMEFORMAT= history 1); hn=${c%%[!0-9 ]*}; hn=${hn// /}; [ "$hn" = "$_STRATA_HN" ] && return $rc; _STRATA_HN=$hn
+  c=$(printf '%s' "$c" | sed 's/^ *[0-9]* *//' | tr '\t\n' '  ')
+  case $(printf '%s' "$c" | tr 'A-Z' 'a-z') in strata*|" "*|*token*|*secret*|*passw*|*apikey*|*api_key*|*bearer*|*akia*|*private\ key*) return $rc;; esac
+  printf '%s\t%s\t%s\t%s\t%s\n' "$_STRATA_T" "$rc" "$((SECONDS-_STRATA_S))" "$PWD" "$c" >> ~/.strata/journal.tsv; return $rc; }
+trap '_strata_debug' DEBUG; PROMPT_COMMAND="_strata_post${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
+# <<< strata recorder <<<
+Z
+;;
+  *) echo "usage: strata hook [zsh|bash] [--install]"; exit 1;; esac
+  if [ $INSTALL -eq 0 ]; then printf '%s\n' "$snippet"; return; fi
+  rc=$HOME/.${sh}rc
+  if grep -qs 'strata recorder' "$rc"; then printf '  recorder already installed in %s\n' "$rc"; return; fi
+  command -v strata >/dev/null 2>&1 || printf '  %snote:%s `strata` is not on your PATH yet, so `strata hook` calls will not work in new shells until it is.\n' "$YEL" "$R"
+  printf '\n%s\n' "$snippet" >> "$rc"
+  printf '\n  %s✓ recorder added to %s%s\n  Open a new terminal. It stores epoch, exit code, duration, directory and command in %s (mode 600).\n  Commands containing token/secret/password/key words, or starting with a space, are never recorded.\n  Remove it any time: delete the block between the "strata recorder" markers.\n\n' "$GRN" "$rc" "$R" "$JOURNAL"
+}
+
+# ---------- fixes: learn how YOU fix things ----------
+_fixes_data() { load_journal | LC_ALL=C awk -F'\t' "$AWK_KEY"'
+  { n++; T[n]=$1+0; RC[n]=$2+0; CM[n]=$5; K[n]=ckey($5) }
+  END{ for(i=1;i<=n;i++){ k=K[i]; if(k==""||triv(k)) continue
+      if(RC[i]!=0&&RC[i]!=130&&RC[i]!=141){ nf[k]++; if(!(k in pend)) pend[k]=i }
+      else if(RC[i]==0&&(k in pend)){ s=pend[k]; delete pend[k]
+        if(T[i]-T[s]>900) continue
+        fix=""; c=0
+        for(j=s+1;j<i;j++) if(RC[j]==0&&K[j]!=k&&!triv(K[j])){ fix=fix (c?" ; ":"") CM[j]; c++ }
+        if(c==0) fix="(just re-ran it: flaky?)"; if(c>3) continue
+        fx[k SUBSEP fix]++ } }
+    for(x in fx){ split(x,p,SUBSEP); if(fx[x]>bc[p[1]]){bc[p[1]]=fx[x]; bf[p[1]]=p[2]} }
+    for(k in nf) printf "%d\t%s\t%s\t%d\n", nf[k], k, (k in bf?bf[k]:"-"), bc[k]+0 }' | sort -t"$TAB" -k1,1 -rn; }
+
+cmd_fixes() {
+  need_journal; local nf k fix fc shown=0
+  printf '\n  %sYOUR TROUBLESHOOTING MEMORY%s — what you did last time it broke\n\n' "$B" "$R"
+  while IFS=$'\t' read -r nf k fix fc; do
+    [ "$nf" -lt 2 ] && continue; shown=$((shown+1))
+    printf '  %s%s%s failed %s×\n' "$RED" "$k" "$R" "$nf"
+    if [ "$fix" = - ]; then printf '     %sno fix pattern yet%s\n\n' "$D" "$R"; else printf '     → %s%s%s  %s(worked %s of %s times)%s\n\n' "$GRN" "$fix" "$R" "$D" "$fc" "$nf" "$R"; fi
+    [ $shown -ge "$TOPN" ] && break
+  done < <(_fixes_data)
+  [ $shown -eq 0 ] && echo "  Nothing has failed twice yet. Keep the recorder on; this fills in as you work."
+  printf '  Right after a failure, run %sstrata fix%s.\n\n' "$CYN" "$R"
+}
+
+cmd_fix() {
+  need_journal; local last ts rc d cwd cmd key row why
+  last=$(load_journal | awk -F'\t' '$2!=0&&$2!=130&&$2!=141{r=$0} END{print r}')
+  [ -z "$last" ] && { printf '\n  %s✓ nothing has failed since the recorder started.%s\n\n' "$GRN" "$R"; return; }
+  IFS=$'\t' read -r ts rc d cwd cmd <<<"$last"
+  case $rc in 127) why="command not found";; 126) why="found but not executable";; 2) why="misuse / bad arguments";; *) why="exit code $rc";; esac
+  key=$(printf '%s\n' "$cmd" | awk "$AWK_KEY"'{print ckey($0)}')
+  printf '\n  %slast failure%s (%s, in %s)\n    %s✗ %s%s  %s(%s)%s\n\n' "$B" "$R" "$(rel "$ts")" "${cwd/#$HOME/~}" "$RED" "$cmd" "$R" "$D" "$why" "$R"
+  row=$(_fixes_data | awk -F'\t' -v k="$key" '$2==k && $3!="-"{print; exit}')
+  if [ -n "$row" ]; then IFS=$'\t' read -r nf _ fix fc <<<"$row"
+    printf '  Last time `%s` failed, you ran:\n    %s%s%s   %s(worked %s of %s times)%s\n\n' "$key" "$GRN" "$fix" "$R" "$D" "$fc" "$nf" "$R"
+  else printf '  No learned fix for `%s` yet. Once you fix it, strata remembers how.\n\n' "$key"; fi
+}
+
+# ---------- resume: where did I leave off? ----------
+cmd_resume() {
+  need_journal; local dir=${WORDS[0]:-$PWD} rows n ts rc c first last now branch dirty failed; dir=$(cd "$dir" 2>/dev/null && pwd || printf %s "$dir")
+  if [ $ALL -eq 1 ]; then
+    printf '\n  %sYOUR PROJECTS%s — most recently touched first\n\n' "$B" "$R"
+    load_journal | awk -F'\t' '{ if($1>l[$4])l[$4]=$1; n[$4]++; c[$4]=$5 } END{ for(d in l) printf "%d\t%d\t%s\t%s\n", l[d], n[d], d, c[d] }' | sort -t"$TAB" -k1,1 -rn | head -n "$TOPN" |
+    while IFS=$'\t' read -r ts n d c; do printf '  %s%-13s%s %s%-34s%s %s%4s cmds%s  last: %s\n' "$D" "$(rel "$ts")" "$R" "$B" "${d/#$HOME/~}" "$R" "$D" "$n" "$R" "${c:0:40}"; done
+    echo; return; fi
+  rows=$(load_journal | awk -F'\t' -v d="$dir" '$4==d{n++;T[n]=$1;RC[n]=$2;C[n]=$5} END{ if(!n)exit 1; s=n; while(s>1&&T[s]-T[s-1]<=1800)s--; for(i=s;i<=n;i++)print T[i]"\t"RC[i]"\t"C[i] }') ||
+    { printf '\n  strata has no recorded commands in %s. Try %sstrata resume --all%s\n\n' "${dir/#$HOME/~}" "$CYN" "$R"; exit 1; }
+  n=$(printf '%s\n' "$rows" | cnt); first=$(printf '%s\n' "$rows" | head -1 | cut -f1); last=$(printf '%s\n' "$rows" | tail -1 | cut -f1)
+  printf '\n  %sWHERE YOU LEFT OFF%s in %s%s%s\n  %slast session %s · %s commands over %s%s\n\n' "$B" "$R" "$B" "${dir/#$HOME/~}" "$R" "$D" "$(rel "$last")" "$n" "$(dur $((last-first)))" "$R"
+  printf '%s\n' "$rows" | grep -v "^[0-9]*${TAB}[0-9]*${TAB}\(ls\|pwd\|clear\)\( \|\$\)" | tail -n 8 | while IFS=$'\t' read -r ts rc c; do
+    if [ "$rc" = 0 ]; then printf '   %s✓%s %s\n' "$GRN" "$R" "${c:0:70}"; else printf '   %s✗%s %s %s(exit %s)%s\n' "$RED" "$R" "${c:0:60}" "$D" "$rc" "$R"; fi; done
+  failed=$(printf '%s\n' "$rows" | tail -1 | awk -F'\t' '$2!=0&&$2!=130{print $3}')
+  [ -n "$failed" ] && printf '\n  %s⚠ you stopped on a failing command:%s %s\n    try %sstrata fix%s\n' "$YEL" "$R" "$failed" "$CYN" "$R"
+  if git -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
+    branch=$(git -C "$dir" rev-parse --abbrev-ref HEAD 2>/dev/null); dirty=$(git -C "$dir" status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+    printf '\n  git: on %s%s%s, %s uncommitted change(s)\n' "$B" "$branch" "$R" "$dirty"
+  fi; echo
+}
+
+# ---------- slow ----------
+cmd_slow() {
+  need_journal; local tot k n avg mx shown=0
+  printf '\n  %sWHERE YOUR TERMINAL TIME GOES%s\n\n' "$B" "$R"
+  load_journal | LC_ALL=C awk -F'\t' "$AWK_KEY"'{ k=ckey($5); if(k==""||$3<1) next; s[k]+=$3; n[k]++; if($3>m[k])m[k]=$3 } END{ for(k in s) printf "%d\t%s\t%d\t%d\n", s[k], k, n[k], m[k] }' | sort -t"$TAB" -k1,1 -rn | head -n "$TOPN" |
+  while IFS=$'\t' read -r tot k n mx; do printf '  %s%8s%s  %-24s %s%4s× · avg %s · worst %s%s\n' "$B" "$(dur "$tot")" "$R" "$k" "$D" "$n" "$(dur $((tot/n)))" "$(dur "$mx")" "$R"; done
+  printf '\n  %sTip:%s anything averaging over a minute is a candidate for a background run or a notifier:  cmd; osascript -e '"'"'display notification "done"'"'"'\n\n' "$YEL" "$R"
+}
+
+# ---------- script: history -> runnable script ----------
+cmd_script() {
+  local mode=hist now; now=$(date +%s); [ -s "$JOURNAL" ] && mode=journal
+  { if [ $mode = journal ]; then load_journal; else load_full | awk -F'\t' '{print $1 "\t0\t0\t\t" $2}'; fi; } | LC_ALL=C awk -F'\t' -v N="$TOPN" -v since="$SINCE" -v now="$now" -v mode=$mode "$AWK_KEY"'
+    { ts=$1+0; rc=$2+0; cwd=$4; cmd=$5
+      if(mode=="journal"&&rc!=0) next; if(since>0&&ts>0&&ts<now-since) next
+      k=ckey(cmd); if(k==""||k=="ls"||k=="pwd"||k=="clear"||k=="history"||k=="strata"||k=="exit"||k=="man") next
+      if(cmd==prev) next; prev=cmd; m++; C[m]=cmd; W[m]=cwd }
+    END{ s=m-N+1; if(s<1)s=1; if(m==0){ print "# strata: no commands matched" > "/dev/stderr"; exit 1 }
+      print "#!/usr/bin/env bash"; printf "# generated by strata from %d command(s)\n", m-s+1
+      if(mode!="journal") print "# NOTE: plain history has no exit codes, so failed commands may be included. Run `strata hook --install` for success-only scripts."
+      print "set -euo pipefail"; print ""
+      if(mode=="journal"&&W[s]!="") { q=W[s]; gsub(/"/,"\\\"",q); print "cd \"" q "\"" }
+      for(i=s;i<=m;i++){ lo=tolower(C[i])
+        if(lo ~ /(token|secret|passw|api_?key|bearer|akia|sk-|private key)/) print "# [strata] skipped: looks like it contains a secret"
+        else print C[i] } }'
+}
+
+# ---------- danger ----------
+cmd_danger() {
+  printf '\n  %sCLOSE CALLS%s — risky commands in your history\n\n' "$B" "$R"
+  local out
+  out=$(load_full | LC_ALL=C awk -F'\t' '
+    BEGIN{ i=0
+      r[++i]="(^| )rm +(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r|-r +-f|-f +-r)[a-zA-Z]* +(\\/|~|\\*|\\$HOME)( |$)"; t[i]="rm -rf on /, ~ or *"; a[i]="the one that ends careers. Use `trash`, or `rm -ri`, and `ls` the target first"
+      r[++i]="(^| )rm +(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r|-r +-f|-f +-r)"; t[i]="rm -rf"; a[i]="try `trash` (brew install trash) so a slip is recoverable"
+      r[++i]="sudo +rm"; t[i]="sudo rm"; a[i]="re-read the path out loud before pressing enter"
+      r[++i]="chmod +(-R +)?[0-7]*777"; t[i]="chmod 777"; a[i]="almost never needed; use 755 for dirs/scripts, 644 for files"
+      r[++i]="(curl|wget)[^|]*\\|[ ]*(sudo +)?(ba|z)?sh"; t[i]="curl | sh"; a[i]="download first, read it, then run it"
+      r[++i]="git +push.*( --force( |$)| -f( |$))"; t[i]="git push --force"; a[i]="use --force-with-lease: it refuses if someone else pushed"
+      r[++i]="git +reset +--hard"; t[i]="git reset --hard"; a[i]="`git stash` first; reflog can rescue commits but not uncommitted work"
+      r[++i]="git +clean +-[a-z]*f"; t[i]="git clean -f"; a[i]="run with -n first to preview what will be deleted"
+      r[++i]="dd +.*of=\\/dev\\/"; t[i]="dd to a device"; a[i]="triple-check the of= target with `diskutil list` / `lsblk`"
+      r[++i]="(DROP|TRUNCATE) +(TABLE|DATABASE)"; t[i]="DROP/TRUNCATE"; a[i]="wrap it in a transaction and take a backup first"
+      r[++i]="docker +system +prune +(-a|--all|--volumes)"; t[i]="docker system prune -a"; a[i]="--volumes deletes data; list with `docker system df` first"
+      r[++i]="kubectl +delete"; t[i]="kubectl delete"; a[i]="confirm your context: `kubectl config current-context`"
+      r[++i]="terraform +(destroy|apply +.*-auto-approve)"; t[i]="terraform destroy/auto-approve"; a[i]="run `terraform plan` and read it"
+      nr=i }
+    { l=$0; sub(/^[^\t]*\t/,"",l); for(j=1;j<=nr;j++) if(l ~ r[j]){ n[j]++; ex[j]=l; ts[j]=$1; if(j==1) break; if(j==2&&n[1]&&0) break; break } }
+    END{ for(j=1;j<=nr;j++) if(n[j]>0) printf "%d\t%s\t%s\t%s\n", n[j], t[j], a[j], substr(ex[j],1,70) }' | sort -t"$TAB" -k1,1 -rn)
+  if [ -z "$out" ]; then printf '  %s✓ no risky patterns found.%s\n\n' "$GRN" "$R"; return; fi
+  printf '%s\n' "$out" | while IFS=$'\t' read -r n t a ex; do printf '  %s%s×%s  %s%s%s\n      %slast: %s%s\n      %s→ %s%s\n\n' "$RED" "$n" "$R" "$B" "$t" "$R" "$D" "$ex" "$R" "$GRN" "$a" "$R"; done
+}
+
+# ---------- coach ----------
+cmd_coach() {
+  printf '\n  %sHABIT COACH%s — small things that cost you time\n\n' "$B" "$R"
+  local out
+  out=$(load_full | LC_ALL=C awk -F'\t' '
+    BEGIN{ i=0
+      r[++i]="^cd +(\\.\\.\\/?)+$"; m[i]=8; t[i]="cd .. chains"; p[i]="alias ..='"'"'cd ..'"'"' ...='"'"'cd ../..'"'"'; or zsh `setopt AUTO_CD` so `..` just works"
+      r[++i]="^cat +[^|<>]+\\|[ ]*(grep|head|tail|wc|awk|sed)"; m[i]=4; t[i]="cat file | grep"; p[i]="skip the cat: `grep pattern file`, `head file`, `wc -l < file`"
+      r[++i]="^history *\\|[ ]*grep"; m[i]=3; t[i]="history | grep"; p[i]="`strata find words`, or Ctrl-R for interactive search"
+      r[++i]="^git +checkout +-b"; m[i]=4; t[i]="git checkout -b"; p[i]="`git switch -c name` is clearer and harder to misuse"
+      r[++i]="ps +(aux|-ef) *\\|[ ]*grep"; m[i]=3; t[i]="ps | grep"; p[i]="`pgrep -fl name` (and `pkill -f name`)"
+      r[++i]="^clear$"; m[i]=15; t[i]="typing clear"; p[i]="Ctrl-L clears the screen, no typing"
+      r[++i]="^ls +-[a-z]*l[a-z]*a|^ls +-[a-z]*a[a-z]*l"; m[i]=15; t[i]="ls -la"; p[i]="alias ll='"'"'ls -la'"'"'"
+      r[++i]="^find +\\. +-name"; m[i]=5; t[i]="find . -name"; p[i]="`fd name` (brew install fd) is faster and ignores .git"
+      r[++i]="^grep +-[a-zA-Z]*r"; m[i]=8; t[i]="grep -r"; p[i]="`rg pattern` (brew install ripgrep): faster, respects .gitignore"
+      r[++i]="^git +status( |$)"; m[i]=40; t[i]="git status"; p[i]="put branch + dirty state in your prompt, or `git status -sb` for a short view"
+      r[++i]="^cd +(\\/|~\\/)"; m[i]=25; t[i]="long cd paths"; p[i]="`zoxide` (brew install zoxide): `z projname` jumps to the best match"
+      r[++i]="^kill +-9"; m[i]=5; t[i]="kill -9"; p[i]="try plain `kill` first so the process can clean up"
+      r[++i]="^rm +-rf +node_modules"; m[i]=3; t[i]="rm -rf node_modules"; p[i]="`npx npkill` finds and clears all of them across projects"
+      r[++i]="^man +"; m[i]=8; t[i]="man pages"; p[i]="`tldr cmd` (brew install tldr) shows the 5 examples you actually wanted"
+      nr=i }
+    { l=$0; sub(/^[^\t]*\t/,"",l); for(j=1;j<=nr;j++) if(l ~ r[j]){ n[j]++; ex[j]=l; break } }
+    END{ for(j=1;j<=nr;j++) if(n[j]>=m[j]) printf "%d\t%s\t%s\t%s\n", n[j], t[j], p[j], substr(ex[j],1,50) }' | sort -t"$TAB" -k1,1 -rn | head -n "$TOPN")
+  if [ -z "$out" ]; then printf '  %s✓ no obvious bad habits. Efficient.%s\n\n' "$GRN" "$R"; return; fi
+  printf '%s\n' "$out" | while IFS=$'\t' read -r n t p ex; do printf '  %s%s×%s %s%s%s  %s(e.g. %s)%s\n      %s→ %s%s\n\n' "$YEL" "$n" "$R" "$B" "$t" "$R" "$D" "$ex" "$R" "$GRN" "$p" "$R"; done
+}
+
+# ---------- wrapped ----------
+cmd_wrapped() {
+  local off tz data total uniq streak days hasts spark="▁▂▃▄▅▆▇█" max=0 h c idx i line peak night top1 who bar w
+  tz=$(date +%z); off=$(( ${tz:1:2} * 3600 + ${tz:3:2} * 60 )); [ "${tz:0:1}" = "-" ] && off=$((-off))
+  data=$(load_full | LC_ALL=C awk -F'\t' -v off=$off "$AWK_KEY"'
+    { t=$1+0; l=$0; sub(/^[^\t]*\t/,"",l); k=ckey(l); if(k=="") next; split(k,kk," "); w=kk[1]; tot++; cnt[w]++
+      if(t>0){ ts++; hr=int(((t+off)%86400)/3600); H[hr]++; dy=int((t+off)/86400); D[dy]++; if(dy<mn||!mn)mn=dy; if(dy>mx)mx=dy } }
+    END{ print "TOTAL\t" tot; u=0; for(w in cnt)u++; print "UNIQ\t" u; print "HASTS\t" (ts>0)
+      for(w in cnt) printf "TOP\t%s\t%d\n", w, cnt[w]
+      for(h=0;h<24;h++) print "HOUR\t" h "\t" H[h]+0
+      s=0;b=0; for(d=mn;d<=mx;d++){ if(d in D){s++; if(s>b)b=s}else s=0 }; print "STREAK\t" b; a=0; for(d in D)a++; print "DAYS\t" a }')
+  total=$(printf '%s\n' "$data" | awk -F'\t' '$1=="TOTAL"{print $2}'); uniq=$(printf '%s\n' "$data" | awk -F'\t' '$1=="UNIQ"{print $2}')
+  hasts=$(printf '%s\n' "$data" | awk -F'\t' '$1=="HASTS"{print $2}'); streak=$(printf '%s\n' "$data" | awk -F'\t' '$1=="STREAK"{print $2}'); days=$(printf '%s\n' "$data" | awk -F'\t' '$1=="DAYS"{print $2}')
+  top1=$(printf '%s\n' "$data" | awk -F'\t' '$1=="TOP"' | sort -t"$TAB" -k3,3 -rn | head -1 | cut -f2)
+  case $top1 in git|gh) who="The Git Gardener";; docker|kubectl|podman) who="The Container Captain";; vim|nvim|nano|emacs|code) who="The Keyboard Monk";; npm|node|yarn|pnpm|npx) who="The Node Nomad";;
+    python|python3|pip|pip3|uv) who="The Snake Charmer";; ssh|scp|mosh) who="The Remote Whisperer";; ls|cd|find|tree) who="The Wanderer";; brew) who="The Tinkerer";; cargo|rustc) who="The Rustacean";; go) who="The Gopher";; claude) who="The Machine Whisperer";; *) who="The Polyglot";; esac
+  night=0
+  if [ "$hasts" = 1 ]; then
+    for h in $(seq 0 23); do c=$(printf '%s\n' "$data" | awk -F'\t' -v h=$h '$1=="HOUR"&&$2==h{print $3}'); eval "HR$h=$c"; [ "$c" -gt "$max" ] && { max=$c; peak=$h; }; [ $h -lt 5 ] && night=$((night+c)); done
+    [ $(( night * 100 / (total>0?total:1) )) -ge 20 ] && who="$who (night shift)"
+  fi
+  w=50; line=$(printf '─%.0s' $(seq 1 $w))
+  printf '\n  %s╭%s╮%s\n' "$CYN" "$line" "$R"
+  printf '  %s│%s  %sTERMINAL WRAPPED%s  %s%s%s\n' "$CYN" "$R" "$B" "$R" "$D" "$(date +%Y)" "$R"
+  printf '  %s│%s  %s commands · %s distinct tools\n' "$CYN" "$R" "$total" "$uniq"
+  printf '  %s│%s  you are: %s%s%s\n  %s│%s\n' "$CYN" "$R" "$B" "$who" "$R" "$CYN" "$R"
+  max2=$(printf '%s\n' "$data" | awk -F'\t' '$1=="TOP"{if($3>m)m=$3} END{print m}')
+  printf '%s\n' "$data" | awk -F'\t' '$1=="TOP"' | sort -t"$TAB" -k3,3 -rn | head -5 | while IFS=$'\t' read -r _ n c; do
+    bar=$(printf '█%.0s' $(seq 1 $(( c * 22 / max2 + 1 )) )); printf '  %s│%s  %-9s %s%s%s %s\n' "$CYN" "$R" "${n:0:9}" "$GRN" "$bar" "$R" "$c"; done
+  if [ "$hasts" = 1 ]; then
+    printf '  %s│%s\n  %s│%s  rhythm  00h ' "$CYN" "$R" "$CYN" "$R"
+    for h in $(seq 0 23); do eval "c=\$HR$h"; idx=$(( c * 7 / (max>0?max:1) )); printf '%s' "${spark:$idx:1}"; done
+    printf ' 23h\n  %s│%s  peak hour: %s:00 · active %s days · longest streak %s days\n' "$CYN" "$R" "$peak" "$days" "$streak"
+  else printf '  %s│%s  %s(no timestamps in this history: enable EXTENDED_HISTORY for rhythm + streaks)%s\n' "$CYN" "$R" "$D" "$R"; fi
+  printf '  %s╰%s╯%s\n\n' "$CYN" "$line" "$R"
+}
+
+# ---------- export / compare ----------
+_keys_data() { local f=${1:-$H}
+  if [ "$(head -c 4000 "$f" | awk -F'\t' 'NF==2 && $2 ~ /^[0-9]+$/ {g++} END{print (g>0 && g==NR)}')" = 1 ]; then cat "$f"; return; fi
+  load_full "$f" | LC_ALL=C awk -F'\t' "$AWK_KEY"'{ l=$0; sub(/^[^\t]*\t/,"",l); k=ckey(l); if(k!=""&&!triv(k)) n[k]++ } END{ for(k in n) if(n[k]>=2) printf "%s\t%d\n", k, n[k] }' | sort -t"$TAB" -k2,2 -rn; }
+cmd_export() { _keys_data; }
+cmd_compare() {
+  local other=${WORDS[0]:-}; [ -r "$other" ] || { echo "usage: strata compare THEIR_PROFILE   (they run: strata export > profile.tsv)"; exit 1; }
+  local mine theirs; mine=$(mktemp); theirs=$(mktemp); _keys_data "$H" > "$mine"; _keys_data "$other" > "$theirs"
+  printf '\n  %sTHEY USE, YOU NEVER HAVE%s\n\n' "$B" "$R"
+  awk -F'\t' 'NR==FNR{m[$1]=1; next} !($1 in m){printf "  %s%-22s%s %s%s× for them%s\n", "'"$B"'", $1, "'"$R"'", "'"$D"'", $2, "'"$R"'"}' "$mine" "$theirs" | head -n "$TOPN"
+  printf '\n  %sYOU USE, THEY NEVER DO%s\n\n' "$B" "$R"
+  awk -F'\t' 'NR==FNR{t[$1]=1; next} !($1 in t){printf "  %s%-22s%s %s%s× for you%s\n", "'"$B"'", $1, "'"$R"'", "'"$D"'", $2, "'"$R"'"}' "$theirs" "$mine" | head -n "$TOPN"
+  local shared; shared=$(awk -F'\t' 'NR==FNR{m[$1]=1; next} ($1 in m){s++} END{print s+0}' "$mine" "$theirs")
+  printf '\n  shared tools: %s%s%s of %s theirs, %s yours\n\n' "$B" "$shared" "$R" "$(wc -l < "$theirs" | tr -d ' ')" "$(wc -l < "$mine" | tr -d ' ')"
+  rm -f "$mine" "$theirs"
+}
+
+case $CMD in dig) cmd_dig;; alias) cmd_alias;; typos) cmd_typos;; flows) cmd_flows;; leaks) cmd_leaks;; find) cmd_find;; doctor) cmd_doctor;;
+  hook) cmd_hook;; fixes) cmd_fixes;; fix) cmd_fix;; resume) cmd_resume;; slow) cmd_slow;; script) cmd_script;; danger) cmd_danger;; coach) cmd_coach;; wrapped) cmd_wrapped;; export) cmd_export;; compare) cmd_compare;; esac
