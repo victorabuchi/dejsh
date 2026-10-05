@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # dejsh — your shell history, audited: aliases, typos, leaked secrets, repeated workflows, recall.
-VERSION=0.7.0
+VERSION=0.7.1
 LAYERS=8; WIDTH=64; TOPN=10; RAW=0; SCRUB=0; JSON=0; RUN=0; ALL=0; INSTALL=0; SINCE=0; HFILE=${DEJSH_HIST:-}
 B=$'\033[1m'; D=$'\033[2m'; R=$'\033[0m'; GRN=$'\033[32m'; YEL=$'\033[33m'; RED=$'\033[31m'; CYN=$'\033[36m'
 
@@ -401,7 +401,7 @@ Z
 _fixes_data() { load_journal | LC_ALL=C awk -F'\t' "$AWK_KEY"'
   { n++; T[n]=$1+0; RC[n]=$2+0; CM[n]=$5; K[n]=ckey($5) }
   END{ for(i=1;i<=n;i++){ k=K[i]; if(k==""||triv(k)) continue
-      if(RC[i]!=0&&RC[i]!=130&&RC[i]!=141){ nf[k]++; if(!(k in pend)) pend[k]=i }
+      if(RC[i]!=0&&RC[i]!=130&&RC[i]!=141){ nf[k]++; pend[k]=i }
       else if(RC[i]==0&&(k in pend)){ s=pend[k]; delete pend[k]
         if(T[i]-T[s]>900) continue
         fix=""; c=0

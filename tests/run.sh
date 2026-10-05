@@ -105,6 +105,13 @@ out=$("$D" fix | strip)
 t "fix shows last failure" has "$out" "git push origin main"
 t "fix explains exit code" has "$out" "exit code 1"
 
+section "fix learning ignores noisy retries"
+J3=$W/j3.tsv; awk -v now="$NOW" -v d="$W" 'function r(rc,c){ printf "%d\t%d\t1\t%s\t%s\n", t, rc, d, c; t+=10 }
+ BEGIN{ t=now-9000; for(i=0;i<3;i++){ r(128,"git status # fails"); r(129,"git init # the fix"); r(128,"git status # works"); r(0,"rm -rf .git"); r(128,"git status"); r(0,"git init"); r(0,"git status") } }' > "$J3"
+out=$(DEJSH_JOURNAL=$J3 "$D" fixes | strip)
+t "fix is the step right before success" has "$out" "→ git init  (worked"
+t "fix excludes earlier noise" hasnt "$out" "rm -rf .git ; git init"
+
 section "memory: resume / slow / script"
 out=$(cd "$P1" && "$D" resume | strip); t "resume shows session" has "$out" "WHERE YOU LEFT OFF"; t "resume flags failing stop" has "$out" "stopped on a failing command"
 out=$("$D" resume --all | strip); t "resume --all lists projects" has "$out" "projA"

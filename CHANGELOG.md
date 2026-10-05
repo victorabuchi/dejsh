@@ -2,6 +2,9 @@
 
 All notable changes. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.7.1]
+- `fix` / `fixes` now measure the fix from the *last* failure before success, so noisy retries and abandoned attempts no longer pollute the remembered fix.
+
 ## [0.7.0]
 - `alias` now suggests stem aliases for commands whose last argument varies (`git commit -m` instead of one frozen message).
 - `flows` no longer freezes one particular argument (like a commit message) into a suggested macro.
